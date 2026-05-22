@@ -457,20 +457,26 @@ function setupShareUI(code) {
   const url = joinUrlFor(code);
   $("#mpShareLink").value = url;
 
-  // Render QR onto the canvas (qrcode lib loaded via CDN).
+  // qr-creator paints a <canvas> inside whatever element you give it. We
+  // pass a wrapper div so it can replace its contents on regenerate.
   const canvas = $("#mpQrCanvas");
-  if (window.QRCode && canvas) {
-    window.QRCode.toCanvas(canvas, url, {
-      width: 200,
-      margin: 1,
-      color: { dark: "#000000", light: "#ffffff" },
-    }, (err) => {
-      if (err) {
-        console.warn("QR generation failed:", err);
-        return;
-      }
+  if (window.QrCreator && canvas) {
+    try {
+      // Clear whatever's inside the canvas container, then render fresh.
+      const ctx = canvas.getContext("2d");
+      ctx && ctx.clearRect(0, 0, canvas.width, canvas.height);
+      window.QrCreator.render({
+        text: url,
+        radius: 0,
+        ecLevel: "M",
+        fill: "#000000",
+        background: "#ffffff",
+        size: 200,
+      }, canvas);
       canvas.classList.remove("hidden");
-    });
+    } catch (e) {
+      console.warn("QR generation failed:", e);
+    }
   }
 
   // Surface the native share sheet on phones; on desktop fall back to copy.

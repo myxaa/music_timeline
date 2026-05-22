@@ -4,10 +4,17 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Music Timeline</title>
-  <meta http-equiv="refresh" content="0;url=app/" />
   <link rel="canonical" href="app/" />
 </head>
 <body>
   <p>Redirecting to <a href="app/">the app</a>…</p>
+  <script>
+    // Preserve query string and hash through the redirect so links like
+    // /?join=ABCD or /?id=w017 still work on the bare URL.
+    location.replace("app/" + location.search + location.hash);
+  </script>
+  <noscript>
+    <meta http-equiv="refresh" content="0;url=app/" />
+  </noscript>
 </body>
 </html>
