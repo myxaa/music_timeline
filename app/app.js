@@ -547,8 +547,6 @@ function clearMpSaved(role) {
 }
 
 function joinUrlFor(code) {
-  // origin + path with ?join=<code>, stripped of any existing query/hash so
-  // a host who deep-linked here doesn't pass that on to invitees.
   const u = new URL(location.href);
   u.search = "";
   u.hash = "";
@@ -556,25 +554,29 @@ function joinUrlFor(code) {
   return u.toString();
 }
 
+function isLocalhost() {
+  const h = location.hostname;
+  return h === "localhost" || h === "127.0.0.1" || h === "::1";
+}
+
 function setupShareUI(code) {
   const url = joinUrlFor(code);
-  $("#mpShareLink").value = url;
 
-  // qr-creator paints a <canvas> inside whatever element you give it. We
-  // pass a wrapper div so it can replace its contents on regenerate.
+  // Display the URL as text only — not a navigable link.
+  const linkEl = $("#mpShareLink");
+  linkEl.textContent = url;
+  linkEl.dataset.url = url;          // store for copy/share
+  $("#mpShareLinkRow").classList.remove("hidden");
+
+  // Render QR
   const canvas = $("#mpQrCanvas");
   if (window.QrCreator && canvas) {
     try {
-      // Clear whatever's inside the canvas container, then render fresh.
       const ctx = canvas.getContext("2d");
       ctx && ctx.clearRect(0, 0, canvas.width, canvas.height);
       window.QrCreator.render({
-        text: url,
-        radius: 0,
-        ecLevel: "M",
-        fill: "#000000",
-        background: "#ffffff",
-        size: 200,
+        text: url, radius: 0, ecLevel: "M",
+        fill: "#000000", background: "#ffffff", size: 200,
       }, canvas);
       canvas.classList.remove("hidden");
     } catch (e) {
@@ -582,14 +584,28 @@ function setupShareUI(code) {
     }
   }
 
-  // Surface the native share sheet on phones; on desktop fall back to copy.
-  if (navigator.share) {
-    $("#mpShareBtn").classList.remove("hidden");
+  // Show native share button on phones
+  if (navigator.share) $("#mpShareBtn").classList.remove("hidden");
+
+  // When running on localhost the QR link can't be opened on other devices.
+  // Show a small warning so the host knows to use the deployed URL instead.
+  let warn = $("#mpLocalhostWarn");
+  if (isLocalhost()) {
+    if (!warn) {
+      warn = document.createElement("p");
+      warn.id = "mpLocalhostWarn";
+      warn.className = "muted small localhost-warn";
+      warn.textContent = "⚠ localhost — phones on your network can't open this link. Use the deployed URL instead, or access this page via your machine's LAN IP.";
+      $("#mpShareLinkRow").insertAdjacentElement("afterend", warn);
+    }
+    warn.style.display = "";
+  } else if (warn) {
+    warn.style.display = "none";
   }
 }
 
 async function shareJoinUrl() {
-  const url = $("#mpShareLink").value;
+  const url = $("#mpShareLink").dataset.url;
   if (!url) return;
   try {
     await navigator.share({
@@ -603,7 +619,7 @@ async function shareJoinUrl() {
 }
 
 async function copyJoinUrl() {
-  const url = $("#mpShareLink").value;
+  const url = $("#mpShareLink").dataset.url;
   if (!url) return;
   try {
     await navigator.clipboard.writeText(url);

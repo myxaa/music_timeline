@@ -50,12 +50,21 @@
       <p class="muted" data-i18n="mp.host.share">Share with players at your table.</p>
       <div class="bigcode-display" id="mpHostCode">…</div>
 
-      <div class="share-row">
+      <div class="share-section">
         <canvas id="mpQrCanvas" width="200" height="200" class="qrcanvas hidden"></canvas>
-        <div class="share-actions">
-          <input id="mpShareLink" class="share-link" readonly />
-          <button id="mpCopyLinkBtn" class="ghost small" data-i18n="mp.host.copyLink">Copy link</button>
-          <button id="mpShareBtn" class="ghost small hidden" data-i18n="mp.host.shareBtn">Share…</button>
+        <div class="share-link-row hidden" id="mpShareLinkRow">
+          <span id="mpShareLink" class="share-link-url"></span>
+          <button id="mpCopyLinkBtn" class="icon-btn" data-i18n-title="mp.host.copyLink" title="Copy link" aria-label="Copy link">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
+          </button>
+          <button id="mpShareBtn" class="icon-btn hidden" data-i18n-title="mp.host.shareBtn" title="Share…" aria-label="Share">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+            </svg>
+          </button>
         </div>
       </div>
 
