@@ -10,9 +10,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=20260522d" />
+  <link rel="stylesheet" href="style.css?v=20260522e" />
   <!-- i18n runs before app.js so <html lang/dir> are set and t() exists. -->
-  <script src="i18n.js?v=20260522d"></script>
+  <script src="i18n.js?v=20260522e"></script>
 </head>
 <body>
   <main id="app">
@@ -34,26 +34,17 @@
       <button id="randomBtn" class="ghost" data-i18n="home.random">Play a random song</button>
       <p class="tiny muted" id="dbStatus" data-i18n="home.loading">Loading songs…</p>
 
-      <!-- Print cards section -->
+      <!-- Printable card PDFs — pre-generated, B&W, duplex-ready -->
       <div class="divider"><span data-i18n="home.printSection">print cards</span></div>
       <details class="print-section" id="printSection">
         <summary class="print-toggle" data-i18n="home.printToggle">Print cards</summary>
         <div class="print-buttons">
-          <button class="ghost small print-btn" id="printAllBtn" data-i18n="home.printAll">Print All</button>
-          <button class="ghost small print-btn" id="printWorldBtn" data-i18n="home.printWorld">Print World</button>
-          <button class="ghost small print-btn" id="printRussiaBtn" data-i18n="home.printRussia">Print Russia/USSR</button>
-          <button class="ghost small print-btn" id="printIsraelBtn" data-i18n="home.printIsrael">Print Israel</button>
-          <details class="print-custom-wrap">
-            <summary class="ghost small print-btn" data-i18n="home.printCustom">Print Custom</summary>
-            <div class="print-custom-panel">
-              <label><input type="checkbox" id="pcWorld"  value="world"  checked /> <span data-i18n="region.world">World</span></label>
-              <label><input type="checkbox" id="pcUssr"   value="ussr"   checked /> <span data-i18n="region.ussr">USSR</span></label>
-              <label><input type="checkbox" id="pcRussia" value="russia" checked /> <span data-i18n="region.russia">Russia</span></label>
-              <label><input type="checkbox" id="pcIsrael" value="israel" checked /> <span data-i18n="region.israel">Israel</span></label>
-              <button class="primary small" id="printCustomBtn" data-i18n="home.printGo">Generate PDF</button>
-            </div>
-          </details>
+          <a class="ghost small print-btn" href="../cards/cards-all.pdf"    download data-i18n="home.printAll">Print All</a>
+          <a class="ghost small print-btn" href="../cards/cards-world.pdf"  download data-i18n="home.printWorld">Print World</a>
+          <a class="ghost small print-btn" href="../cards/cards-russia.pdf" download data-i18n="home.printRussia">Print Russia/USSR</a>
+          <a class="ghost small print-btn" href="../cards/cards-israel.pdf" download data-i18n="home.printIsrael">Print Israel</a>
         </div>
+        <p class="tiny muted" style="margin-top:8px">B&amp;W laser/inkjet · duplex · 20 cards/page · QR front + answer back</p>
       </details>
     </section>
 
@@ -299,7 +290,6 @@
   <script src="https://unpkg.com/html5-qrcode@2.3.10/html5-qrcode.min.js"></script>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qr-creator@1.0.0/dist/qr-creator.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="app.js?v=20260522d"></script>
+<script src="app.js?v=20260522e"></script>
 </body>
 </html>

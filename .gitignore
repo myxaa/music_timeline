@@ -6,7 +6,12 @@ venv/
 .env
 
 # Build artefacts — regenerable from scripts/.
+# Regenerated/test PDFs (not the canonical hosted sets).
 cards/*.pdf
+!cards/cards-all.pdf
+!cards/cards-world.pdf
+!cards/cards-russia.pdf
+!cards/cards-israel.pdf
 
 # Editor / OS cruft
 .DS_Store
