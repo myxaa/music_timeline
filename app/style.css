@@ -394,6 +394,13 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   overflow: hidden;
   background: #000;
 }
+/* html5-qrcode injects video/canvas with fixed inline widths — cap them. */
+#reader video,
+#reader canvas,
+#reader img {
+  max-width: 100% !important;
+  width: 100% !important;
+}
 
 .qr-file-label {
   display: flex;

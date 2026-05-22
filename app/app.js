@@ -1420,38 +1420,63 @@ function onQrDecoded(decoded) {
 async function startScanner() {
   showScreen("scanner");
   if (qrScanner) await stopScanner();
-  // Always hide the file fallback when first opening scanner.
   $("#qrFileFallback").classList.add("hidden");
   $("#scanHint").textContent = t("free.cameraRetrying");
 
-  qrScanner = new Html5Qrcode("reader");
-  const config = { fps: 12, qrbox: { width: 240, height: 240 } };
-
-  // Firefox Mobile rejects { facingMode:"environment" } without prompting.
-  // Walk through constraints from most-specific to most-permissive.
-  const constraints = [
-    { facingMode: { ideal: "environment" } }, // prefer rear, don't require it
-    { facingMode: "environment" },
-    { facingMode: "user" },
-    true,                                       // any camera
+  // Step 1: use the native getUserMedia to get the browser to show its
+  // camera permission prompt. html5-qrcode.start() silently resolves on
+  // Firefox Mobile even when it didn't actually open the camera, so we
+  // can't rely on it for the prompt.
+  const attempts = [
+    { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } } },
+    { video: { facingMode: "user" } },
+    { video: true },
   ];
 
-  for (const cam of constraints) {
+  let stream = null;
+  for (const c of attempts) {
     try {
-      await qrScanner.start(cam, config, onQrDecoded, () => {});
-      $("#scanHint").textContent = t("free.scanHint");
-      return; // success — stop trying
+      stream = await navigator.mediaDevices.getUserMedia(c);
+      break;
     } catch (e) {
-      console.warn("camera constraint failed:", cam, e.name, e.message);
-      // If the element was already partially initialised, reset it.
-      try { await qrScanner.stop(); } catch {}
+      if (e.name === "NotAllowedError" || e.name === "PermissionDeniedError") {
+        // User explicitly denied — stop immediately.
+        $("#scanHint").textContent = t("free.cameraError", { msg: "Camera access denied" });
+        $("#qrFileFallback").classList.remove("hidden");
+        return;
+      }
+      // NotFoundError, OverconstrainedError, etc. — try the next constraint.
+      console.warn("getUserMedia failed:", e.name, e.message);
     }
   }
 
-  // All camera attempts failed — show file-input fallback.
-  $("#scanHint").textContent = t("free.cameraError", { msg: t("free.orUploadQr") });
-  $("#qrFileFallback").classList.remove("hidden");
-  qrScanner = null;
+  if (!stream) {
+    // No camera available at all.
+    $("#scanHint").textContent = t("free.cameraError", { msg: "No camera found" });
+    $("#qrFileFallback").classList.remove("hidden");
+    return;
+  }
+
+  // Step 2: permission granted. Stop the probe stream and hand control to
+  // html5-qrcode which manages its own stream internally.
+  stream.getTracks().forEach((t) => t.stop());
+
+  qrScanner = new Html5Qrcode("reader");
+  try {
+    await qrScanner.start(
+      { facingMode: { ideal: "environment" } },
+      { fps: 12, qrbox: { width: 240, height: 240 } },
+      onQrDecoded,
+      () => {}
+    );
+    $("#scanHint").textContent = t("free.scanHint");
+  } catch (e) {
+    // html5-qrcode failed despite having permission — very rare.
+    console.warn("html5-qrcode.start failed:", e.name, e.message);
+    $("#scanHint").textContent = t("free.cameraError", { msg: e.message });
+    $("#qrFileFallback").classList.remove("hidden");
+    qrScanner = null;
+  }
 }
 
 async function stopScanner() {
