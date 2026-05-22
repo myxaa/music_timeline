@@ -22,6 +22,10 @@ html, body {
   color: var(--fg);
   min-height: 100vh;
   -webkit-tap-highlight-color: transparent;
+  /* Long Cyrillic/Hebrew titles can blow past viewport width on narrow
+     phones; clamp at the body so nothing forces a horizontal scrollbar. */
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 #app {
@@ -234,10 +238,23 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   gap: 14px;
   align-items: center;
   text-align: left;
+  /* Without this, the 1fr column can blow out the parent: grid items
+     default to min-width:auto which is the content's intrinsic width. */
+  min-width: 0;
 }
 .tlcard .y { font-size: 1.6rem; font-weight: 800; color: var(--accent); min-width: 4ch; }
-.tlcard .meta { font-size: 0.9rem; }
-.tlcard .meta strong { display: block; font-weight: 700; }
+.tlcard .meta {
+  font-size: 0.9rem;
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.tlcard .meta strong {
+  display: block;
+  font-weight: 700;
+  overflow-wrap: break-word;
+}
+.tlcard .meta span { display: block; overflow-wrap: break-word; }
 
 .timeline-empty {
   color: var(--muted);

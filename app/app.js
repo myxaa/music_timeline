@@ -235,7 +235,7 @@ function describePlacement() {
 
 function revealAndScore() {
   if (game.selectedSlot === null || !game.currentSong) return;
-  if (ytPlayer && ytPlayer.pauseVideo) try { ytPlayer.pauseVideo(); } catch {}
+  // Music keeps playing through the reveal screen.
 
   const me = game.players[game.turnIdx];
   const tl = me.timeline;
@@ -399,6 +399,30 @@ async function onStartGameTap() {
 function refreshResumeButton() {
   const saved = loadGameFromStorage();
   $("#resumeBtn").classList.toggle("hidden", !saved || saved.phase === "over");
+  const hostSaved = loadMpSaved("host");
+  $("#resumeHostBtn").classList.toggle(
+    "hidden", !hostSaved || hostSaved.phase === "over"
+  );
+  const playerSaved = loadMpSaved("player");
+  $("#resumePlayerBtn").classList.toggle(
+    "hidden", !playerSaved || playerSaved.phase === "over"
+  );
+}
+
+async function resumeHostedGame() {
+  const snap = loadMpSaved("host");
+  if (!snap) return;
+  startHosting(snap);
+}
+
+async function resumePlayerGame() {
+  const snap = loadMpSaved("player");
+  if (!snap) return;
+  // Restore state visually first so the user sees their timeline; the
+  // join handshake will refresh it from the (possibly new) host.
+  mpGame = { ...snap, role: "player", peer: null, hostConn: null };
+  renderMpScreen();
+  joinAsPlayer({ code: snap.code, name: snap.myName || "Player", isResume: true });
 }
 
 async function resumeGame() {
@@ -432,8 +456,17 @@ async function resumeGame() {
 
 const MP_PREFIX = "mt-";
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ"; // no O/I — too easy to confuse
+const MP_HOST_KEY = "mt.mp.host.v1";   // saved host game state
+const MP_PLAYER_KEY = "mt.mp.player.v1"; // saved player mirror state
+const MP_PLAYER_PEER_KEY = "mt.mp.peerId"; // stable per-device peer ID
+const SAVE_TTL_MS = 30 * 60 * 1000;    // resume button shows for 30 min
+const HOST_DEAD_AFTER_MS = 90 * 1000;  // after 90s no broadcast, election starts
+const ELECTION_STEP_MS = 15 * 1000;    // each rank waits an extra 15s
+
 let mpGame = null;     // { role, peer, ... } — populated on host or join
 let mpYtPlayer = null; // host-only audio player (separate iframe)
+let mpReconnectTimer = null;
+let mpElectionTimer = null;
 
 function randomCode(len = 4) {
   let s = "";
@@ -441,6 +474,71 @@ function randomCode(len = 4) {
     s += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
   }
   return s;
+}
+
+function getStablePeerId() {
+  // Random per-device ID so a player who reloads keeps the same peer
+  // identity — lets the host recognise them as the same slot, and lets
+  // the election algorithm produce stable rankings across reloads.
+  let id = localStorage.getItem(MP_PLAYER_PEER_KEY);
+  if (!id) {
+    const buf = new Uint8Array(8);
+    crypto.getRandomValues(buf);
+    id = MP_PREFIX + "p-" + Array.from(buf).map((b) => b.toString(16).padStart(2, "0")).join("");
+    localStorage.setItem(MP_PLAYER_PEER_KEY, id);
+  }
+  return id;
+}
+
+function saveMpState() {
+  if (!mpGame) return;
+  const snap = {
+    savedAt: Date.now(),
+    role: mpGame.role,
+    code: mpGame.code,
+    hostPeerId: mpGame.hostPeerId,
+    myPeerId: mpGame.myPeerId,
+    myName: mpGame.myName,
+    targetScore: mpGame.targetScore,
+    regions: mpGame.regions,
+    used: mpGame.used,
+    turnIdx: mpGame.turnIdx,
+    phase: mpGame.phase,
+    players: mpGame.players,
+    // host-only: full current song; player-only: lastHostMsgAt
+    currentSong: mpGame.currentSong || null,
+    selectedSlot: mpGame.selectedSlot ?? null,
+    lastCorrect: mpGame.lastCorrect ?? null,
+    winner: mpGame.winner ?? null,
+    revealedSong: mpGame.revealedSong || null,
+    lastHostMsgAt: mpGame.lastHostMsgAt || null,
+  };
+  try {
+    localStorage.setItem(
+      mpGame.role === "host" ? MP_HOST_KEY : MP_PLAYER_KEY,
+      JSON.stringify(snap)
+    );
+  } catch (e) {
+    console.warn("save failed", e);
+  }
+}
+
+function loadMpSaved(role) {
+  const key = role === "host" ? MP_HOST_KEY : MP_PLAYER_KEY;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const snap = JSON.parse(raw);
+    if (!snap.savedAt || Date.now() - snap.savedAt > SAVE_TTL_MS) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return snap;
+  } catch { return null; }
+}
+
+function clearMpSaved(role) {
+  localStorage.removeItem(role === "host" ? MP_HOST_KEY : MP_PLAYER_KEY);
 }
 
 function joinUrlFor(code) {
@@ -517,45 +615,79 @@ async function copyJoinUrl() {
 }
 
 // ─── HOST ───
-async function startHosting() {
-  const code = randomCode();
+async function startHosting(resumeSnap = null) {
+  // Use a stable peer ID for the host slot too so resume → same code.
+  const code = resumeSnap?.code || randomCode();
   const peerId = MP_PREFIX + code;
   const peer = new Peer(peerId, { debug: 1 });
 
-  mpGame = {
-    role: "host",
-    peer,
-    code,
-    myPeerId: peerId,
-    hostPeerId: peerId,
-    connections: new Map(), // peerId -> DataConnection (excludes host self)
-    players: [], // will include host as first entry once we know host name
-    targetScore: 10,
-    regions: ["world", "ussr", "russia", "israel"],
-    phase: "lobby",
-    used: [],
-    turnIdx: 0,
-    currentSong: null,
-    selectedSlot: null,
-    lastCorrect: null,
-    winner: null,
-  };
+  if (resumeSnap) {
+    mpGame = {
+      role: "host",
+      peer,
+      code,
+      myPeerId: peerId,
+      hostPeerId: peerId,
+      connections: new Map(),
+      players: resumeSnap.players || [],
+      targetScore: resumeSnap.targetScore || 10,
+      regions: resumeSnap.regions || ["world", "ussr", "russia", "israel"],
+      phase: resumeSnap.phase || "lobby",
+      used: resumeSnap.used || [],
+      turnIdx: resumeSnap.turnIdx || 0,
+      currentSong: resumeSnap.currentSong || null,
+      selectedSlot: resumeSnap.selectedSlot ?? null,
+      lastCorrect: resumeSnap.lastCorrect ?? null,
+      winner: resumeSnap.winner || null,
+    };
+  } else {
+    mpGame = {
+      role: "host",
+      peer,
+      code,
+      myPeerId: peerId,
+      hostPeerId: peerId,
+      connections: new Map(),
+      players: [],
+      targetScore: 10,
+      regions: ["world", "ussr", "russia", "israel"],
+      phase: "lobby",
+      used: [],
+      turnIdx: 0,
+      currentSong: null,
+      selectedSlot: null,
+      lastCorrect: null,
+      winner: null,
+    };
+  }
 
   $("#mpHostCode").textContent = "…";
   showScreen("mpHostLobby");
 
-  peer.on("open", (id) => {
+  peer.on("open", async (id) => {
     $("#mpHostCode").textContent = code;
-    // Ask host for their name (use a default for now — they can edit it).
-    const hostName = prompt("Your name (host):", "Host") || "Host";
-    mpGame.players.push({
-      peerId: id,
-      name: hostName,
-      timeline: [],
-      isHost: true,
-    });
-    setupShareUI(code);
-    renderMpHostLobby();
+    if (resumeSnap) {
+      // Resuming a saved game — host slot already in players list. If we're
+      // mid-game, reload the current song so audio comes back.
+      setupShareUI(code);
+      if (mpGame.currentSong && (mpGame.phase === "place" || mpGame.phase === "reveal")) {
+        await mpEnsureHostPlayer();
+        try { mpYtPlayer.loadVideoById({ videoId: mpGame.currentSong.youtube_id }); } catch {}
+      }
+      renderMpScreen();
+      mpBroadcast(); // anyone who reconnects will get fresh state
+    } else {
+      const hostName = prompt("Your name (host):", "Host") || "Host";
+      mpGame.players.push({
+        peerId: id,
+        name: hostName,
+        timeline: [],
+        isHost: true,
+      });
+      setupShareUI(code);
+      renderMpHostLobby();
+      saveMpState();
+    }
   });
 
   peer.on("error", (err) => {
@@ -590,16 +722,25 @@ function handleMessageFromPlayer(conn, msg) {
   switch (msg.type) {
     case "join": {
       const name = (msg.name || "Player").slice(0, 20);
-      // Add player if not already present (might be a re-join).
-      if (!mpGame.players.find((p) => p.peerId === conn.peer)) {
+      // Returning player? Match by stable peerId first, then by name (in
+      // case they got a new peer ID for some reason). Either way, their
+      // existing timeline + slot in turn order are preserved.
+      let existing = mpGame.players.find((p) => p.peerId === conn.peer);
+      if (!existing) {
+        existing = mpGame.players.find(
+          (p) => !p.isHost && p.name === name && !mpGame.connections.has(p.peerId)
+        );
+        if (existing) existing.peerId = conn.peer; // refresh ID
+      }
+      if (!existing) {
         mpGame.players.push({ peerId: conn.peer, name, timeline: [] });
       }
       renderMpHostLobby();
+      renderMpScreen();
       mpBroadcast();
       break;
     }
     case "lockIn": {
-      // Only honour from the player whose turn it is.
       const cur = mpGame.players[mpGame.turnIdx];
       if (!cur || cur.peerId !== conn.peer) return;
       if (mpGame.phase !== "place") return;
@@ -620,6 +761,7 @@ function mpBroadcast() {
   }
   // Host's own UI re-renders directly from its full state.
   renderMpScreen();
+  saveMpState();
 }
 
 function mpPublicState(g) {
@@ -646,6 +788,10 @@ function mpPublicState(g) {
     } : null,
     lastCorrect: g.lastCorrect,
     winner: g.winner,
+    // Sent to players so they can run an election + carry on as host if
+    // the original host disappears. These don't leak the current song.
+    regions: g.regions,
+    used: g.used,
   };
 }
 
@@ -691,6 +837,9 @@ async function mpDrawNext() {
   mpGame.lastCorrect = null;
   mpGame.phase = "place";
   mpGame.used.push(song.id);
+  // Ensure we're on the turn screen even if we just promoted from the
+  // election or are resuming from a fresh state.
+  showScreen("mpTurn");
   mpBroadcast();
   if (mpYtPlayer && mpYtPlayer.loadVideoById) {
     try { mpYtPlayer.loadVideoById({ videoId: song.youtube_id }); } catch {}
@@ -701,7 +850,9 @@ async function mpDrawNext() {
 function mpRevealAndScore() {
   if (mpGame.role !== "host") return;
   if (!mpGame.currentSong) return;
-  if (mpYtPlayer && mpYtPlayer.pauseVideo) try { mpYtPlayer.pauseVideo(); } catch {}
+  // Don't pause — players keep listening to the song through the reveal
+  // screen until the host advances to the next turn (which loads a new
+  // video and naturally replaces the audio).
 
   const cur = mpGame.players[mpGame.turnIdx];
   const tl = cur.timeline;
@@ -760,80 +911,152 @@ function mpFinishGame() {
   }
   mpGame.phase = "over";
   mpBroadcast();
+  // Don't keep the saved game once it's clearly over — the Resume button
+  // would otherwise drop people back into a finished session.
+  clearMpSaved("host");
+  clearMpSaved("player");
 }
 
 function mpHostQuit() {
   if (!confirm("End the multiplayer game?")) return;
+  clearMpSaved("host");
+  if (mpReconnectTimer) { clearInterval(mpReconnectTimer); mpReconnectTimer = null; }
+  if (mpElectionTimer) { clearInterval(mpElectionTimer); mpElectionTimer = null; }
   if (mpGame && mpGame.peer) try { mpGame.peer.destroy(); } catch {}
   if (mpYtPlayer && mpYtPlayer.stopVideo) try { mpYtPlayer.stopVideo(); } catch {}
   mpGame = null;
   showScreen("home");
+  refreshResumeButton();
 }
 
 // ─── PLAYER ───
-async function joinAsPlayer() {
-  const codeInput = $("#mpCodeInput").value.trim().toUpperCase();
-  const name = $("#mpNameInput").value.trim() || "Player";
+async function joinAsPlayer(opts = {}) {
+  const codeInput = (opts.code || $("#mpCodeInput").value).trim().toUpperCase();
+  const name = (opts.name || $("#mpNameInput").value).trim() || "Player";
+  const isResume = !!opts.isResume;
   if (!/^[A-Z]{4}$/.test(codeInput)) {
     $("#mpJoinStatus").textContent = "Code should be 4 letters.";
     return;
   }
   $("#mpJoinStatus").textContent = "Connecting…";
   const targetId = MP_PREFIX + codeInput;
-  const peer = new Peer(undefined, { debug: 1 }); // random self ID
+  const myId = getStablePeerId();
+  const peer = new Peer(myId, { debug: 1 });
 
+  let usedStableId = true;
+  peer.on("error", (err) => {
+    if (err.type === "unavailable-id" && usedStableId) {
+      usedStableId = false;
+      try { peer.destroy(); } catch {}
+      const fallback = new Peer(undefined, { debug: 1 });
+      attachPlayerHandlers(fallback, codeInput, targetId, name, isResume);
+      return;
+    }
+    if (!isResume) {
+      $("#mpJoinStatus").textContent = "Error: " + (err.type || err.message);
+      if (err.type === "peer-unavailable") {
+        $("#mpJoinStatus").textContent = "No game with that code is running.";
+      }
+    }
+    // For resume: silently retry via the reconnect timer.
+  });
+  attachPlayerHandlers(peer, codeInput, targetId, name, isResume);
+}
+
+function attachPlayerHandlers(peer, code, hostPeerId, name, isResume = false) {
   peer.on("open", (myId) => {
-    const conn = peer.connect(targetId, { reliable: true });
+    const conn = peer.connect(hostPeerId, { reliable: true });
     let opened = false;
     const timeout = setTimeout(() => {
-      if (!opened) {
+      if (opened) return;
+      try { conn.close(); } catch {}
+      if (isResume) {
+        // Host not online yet — keep the peer alive so the reconnect
+        // timer can keep trying.
+        mpGame = mpGame || {};
+        Object.assign(mpGame, {
+          role: "player", peer, hostConn: null,
+          myPeerId: myId, hostPeerId, code, myName: name,
+        });
+        $("#mpJoinStatus").textContent = "Waiting for host…";
+        attemptPlayerReconnect();
+      } else {
         $("#mpJoinStatus").textContent = "Couldn't reach host. Check the code.";
-        try { conn.close(); } catch {}
         try { peer.destroy(); } catch {}
       }
     }, 8000);
     conn.on("open", () => {
       opened = true;
       clearTimeout(timeout);
-      mpGame = {
+      mpGame = mpGame && mpGame.role === "player" ? mpGame : {};
+      Object.assign(mpGame, {
         role: "player",
         peer,
         hostConn: conn,
         myPeerId: myId,
-        hostPeerId: targetId,
-        code: codeInput,
-        phase: "lobby",
-        players: [],
-        targetScore: 10,
-        turnIdx: 0,
+        hostPeerId,
+        code,
+        myName: name,
+        // Phase + players fill in when the host broadcasts state. Until
+        // then assume lobby with empty list.
+        phase: mpGame.phase || "lobby",
+        players: mpGame.players || [],
+        targetScore: mpGame.targetScore || 10,
+        turnIdx: mpGame.turnIdx || 0,
+        regions: mpGame.regions || ["world", "ussr", "russia", "israel"],
+        used: mpGame.used || [],
         revealedSong: null,
         lastCorrect: null,
         winner: null,
-        myName: name,
-        selectedSlot: null, // local only
-      };
+        selectedSlot: null,
+        lastHostMsgAt: Date.now(),
+      });
       conn.send({ type: "join", name });
-      showScreen("mpPlayerLobby");
+      $("#mpJoinStatus").textContent = "";
       renderMpScreen();
+      saveMpState();
+      ensureElectionTimer();
     });
     conn.on("data", (msg) => handleMessageFromHost(msg));
     conn.on("close", () => {
-      alert("Host disconnected.");
-      mpGame = null;
-      showScreen("home");
+      console.log("conn closed — auto-reconnect");
+      attemptPlayerReconnect();
     });
     conn.on("error", (e) => {
       console.warn("conn error", e);
-      $("#mpJoinStatus").textContent = "Connection error: " + (e.type || e.message);
     });
   });
+}
 
-  peer.on("error", (err) => {
-    $("#mpJoinStatus").textContent = "Error: " + (err.type || err.message);
-    if (err.type === "peer-unavailable") {
-      $("#mpJoinStatus").textContent = "No game with that code is running.";
+function attemptPlayerReconnect() {
+  if (!mpGame || mpGame.role !== "player") return;
+  // Don't bail home — re-establish the connection. The host might have
+  // reloaded (in which case they come back at the same peer ID) or be
+  // momentarily offline.
+  $("#mpJoinStatus").textContent = "Reconnecting…";
+  if (mpReconnectTimer) return; // already trying
+  let attempts = 0;
+  mpReconnectTimer = setInterval(() => {
+    if (!mpGame || mpGame.role !== "player") {
+      clearInterval(mpReconnectTimer); mpReconnectTimer = null; return;
     }
-  });
+    attempts += 1;
+    try {
+      const conn = mpGame.peer.connect(mpGame.hostPeerId, { reliable: true });
+      conn.on("open", () => {
+        mpGame.hostConn = conn;
+        mpGame.lastHostMsgAt = Date.now();
+        clearInterval(mpReconnectTimer); mpReconnectTimer = null;
+        conn.send({ type: "join", name: mpGame.myName });
+        conn.on("data", (msg) => handleMessageFromHost(msg));
+        conn.on("close", () => attemptPlayerReconnect());
+      });
+      conn.on("error", () => { try { conn.close(); } catch {} });
+    } catch (e) {
+      console.warn("reconnect attempt failed", e);
+    }
+    // Election kicks in below via the dedicated timer.
+  }, 5000);
 }
 
 function handleMessageFromHost(msg) {
@@ -841,19 +1064,144 @@ function handleMessageFromHost(msg) {
   if (msg.type === "state") {
     const prevPhase = mpGame.phase;
     Object.assign(mpGame, msg.state);
-    // When the turn changes back to "place", clear our local selection.
+    mpGame.lastHostMsgAt = Date.now();
     if (msg.state.phase === "place" && prevPhase !== "place") {
       mpGame.selectedSlot = null;
     }
     renderMpScreen();
+    saveMpState();
   }
 }
 
 function mpPlayerQuit() {
   if (!confirm("Leave the game?")) return;
+  if (mpReconnectTimer) { clearInterval(mpReconnectTimer); mpReconnectTimer = null; }
+  if (mpElectionTimer) { clearInterval(mpElectionTimer); mpElectionTimer = null; }
+  clearMpSaved("player");
   if (mpGame && mpGame.peer) try { mpGame.peer.destroy(); } catch {}
   mpGame = null;
   showScreen("home");
+}
+
+// ─── Host election ──────────────────────────────────────────────────────────
+function ensureElectionTimer() {
+  if (mpElectionTimer) return;
+  mpElectionTimer = setInterval(checkElection, 10 * 1000);
+}
+
+function checkElection() {
+  if (!mpGame || mpGame.role !== "player") {
+    if (mpElectionTimer) { clearInterval(mpElectionTimer); mpElectionTimer = null; }
+    return;
+  }
+  const elapsed = Date.now() - (mpGame.lastHostMsgAt || 0);
+  if (elapsed < HOST_DEAD_AFTER_MS) return;
+
+  // Sort active non-host players by peerId; my rank determines my delay.
+  const candidates = (mpGame.players || [])
+    .filter((p) => !p.isHost)
+    .map((p) => p.peerId)
+    .sort();
+  const myRank = candidates.indexOf(mpGame.myPeerId);
+  if (myRank === -1) return; // we're not in the player list — skip
+  const myDelay = HOST_DEAD_AFTER_MS + myRank * ELECTION_STEP_MS;
+  if (elapsed < myDelay) return;
+
+  // It's my turn to attempt takeover.
+  if (mpElectionTimer) { clearInterval(mpElectionTimer); mpElectionTimer = null; }
+  attemptHostTakeover();
+}
+
+async function attemptHostTakeover() {
+  const code = mpGame.code;
+  const savedPlayers = mpGame.players || [];
+  const savedRegions = mpGame.regions || ["world", "ussr", "russia", "israel"];
+  const savedUsed = mpGame.used || [];
+  const savedTarget = mpGame.targetScore || 10;
+  const savedTurn = mpGame.turnIdx || 0;
+  const myPeerId = mpGame.myPeerId;
+  const myName = mpGame.myName;
+
+  // Tear down player-side peer first; PeerJS won't let one Peer instance
+  // host and connect at once for the same ID.
+  if (mpReconnectTimer) { clearInterval(mpReconnectTimer); mpReconnectTimer = null; }
+  try { if (mpGame.peer) mpGame.peer.destroy(); } catch {}
+
+  const hostPeerId = MP_PREFIX + code;
+  const peer = new Peer(hostPeerId, { debug: 1 });
+
+  // Map the saved roster onto a fresh host state. The promoted player
+  // becomes the new "host" slot (so they get to advance turns and
+  // control audio), but the old host's slot stays in the roster so they
+  // can rejoin later as a regular player.
+  const newPlayers = savedPlayers.map((p) => ({
+    peerId: p.peerId,
+    name: p.name,
+    timeline: p.timeline || [],
+    // Tag the new host. Anyone who was previously isHost is demoted.
+    isHost: p.peerId === myPeerId,
+  }));
+  // If the previous host wasn't in the list (shouldn't happen but
+  // defensive), ensure we appear.
+  if (!newPlayers.find((p) => p.peerId === myPeerId)) {
+    newPlayers.push({ peerId: myPeerId, name: myName || "Host", timeline: [], isHost: true });
+  }
+
+  mpGame = {
+    role: "host",
+    peer,
+    code,
+    myPeerId: hostPeerId,
+    hostPeerId,
+    connections: new Map(),
+    players: newPlayers,
+    targetScore: savedTarget,
+    regions: savedRegions,
+    phase: "place",   // resume mid-game; song will reload below
+    used: savedUsed,
+    turnIdx: savedTurn,
+    currentSong: null,    // old current song is lost; pick a new one
+    selectedSlot: null,
+    lastCorrect: null,
+    winner: null,
+  };
+
+  peer.on("open", async () => {
+    $("#mpHostCode").textContent = code;
+    setupShareUI(code);
+    showScreen("mpHostLobby"); // briefly show lobby; we'll move to turn
+    renderMpHostLobby();
+    saveMpState();
+    // Pick a new song and resume play.
+    await mpEnsureHostPlayer();
+    await mpDrawNext();
+  });
+
+  peer.on("error", (err) => {
+    if (err.type === "unavailable-id") {
+      // The original host came back, or another player won the election.
+      // Fall back to rejoining as a regular player.
+      alert("Couldn't take over — another host is online. Rejoining as a player.");
+      mpGame = null;
+      // Show join screen with code prefilled so they can re-enter quickly.
+      showScreen("mpJoin");
+      $("#mpCodeInput").value = code;
+      $("#mpNameInput").value = myName || "";
+      return;
+    }
+    console.warn("takeover error", err);
+  });
+
+  peer.on("connection", (conn) => {
+    mpGame.connections.set(conn.peer, conn);
+    conn.on("data", (msg) => handleMessageFromPlayer(conn, msg));
+    conn.on("close", () => {
+      mpGame.connections.delete(conn.peer);
+      renderMpHostLobby();
+      mpBroadcast();
+    });
+    conn.on("error", (e) => console.warn("conn error", e));
+  });
 }
 
 // ─── Rendering (shared) ───
@@ -1126,7 +1474,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   $("#gameBtn").addEventListener("click", openSetup);
   $("#resumeBtn").addEventListener("click", resumeGame);
-  $("#hostBtn").addEventListener("click", startHosting);
+  $("#resumeHostBtn").addEventListener("click", resumeHostedGame);
+  $("#resumePlayerBtn").addEventListener("click", resumePlayerGame);
+  $("#hostBtn").addEventListener("click", () => startHosting());
   $("#joinBtn").addEventListener("click", () => {
     $("#mpJoinStatus").textContent = "";
     $("#mpCodeInput").value = "";
@@ -1223,5 +1573,18 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
+  }
+
+  // Auto-resume on reload. Deep-link join (?join=…) wins over auto-resume.
+  if (!linkedId && !/^[A-Z]{4}$/.test(joinCode)) {
+    const hostSaved = loadMpSaved("host");
+    const playerSaved = loadMpSaved("player");
+    if (hostSaved && hostSaved.phase !== "over") {
+      // Defer slightly so the home screen flashes briefly — gives the
+      // user a chance to bail out by tapping anywhere else first.
+      setTimeout(() => resumeHostedGame(), 100);
+    } else if (playerSaved && playerSaved.phase !== "over") {
+      setTimeout(() => resumePlayerGame(), 100);
+    }
   }
 });
