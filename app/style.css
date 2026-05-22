@@ -365,3 +365,59 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   overflow: hidden;
   background: #000;
 }
+
+/* ─── Multiplayer ───────────────────────────────────────────────────────── */
+.bigcode-display {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 4rem;
+  font-weight: 800;
+  letter-spacing: 0.5rem;
+  background: var(--card);
+  padding: 22px 32px 22px 38px; /* extra left padding to balance letter-spacing */
+  border-radius: var(--radius);
+  color: var(--accent);
+}
+
+input.bigcode {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 2.2rem;
+  font-weight: 800;
+  letter-spacing: 0.4rem;
+  text-align: center;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--fg);
+  padding: 14px 18px;
+  outline: none;
+  text-transform: uppercase;
+}
+input.bigcode:focus { border-color: var(--accent); }
+
+input[type="text"]:not(.bigcode) {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--fg);
+  font: inherit;
+  padding: 12px 14px;
+  outline: none;
+}
+input[type="text"]:not(.bigcode):focus { border-color: var(--accent); }
+
+#mpHostPlayers .player-row,
+#mpClientPlayers .player-row {
+  cursor: default;
+  padding: 10px 14px;
+}
+#mpHostPlayers .player-row.you,
+#mpClientPlayers .player-row.you {
+  border: 1px solid var(--accent);
+}
+#mpHostPlayers .player-row .role,
+#mpClientPlayers .player-row .role {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+}

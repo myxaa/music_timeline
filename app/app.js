@@ -1,13 +1,16 @@
 /*
  * Music Timeline PWA.
  *
- * Two modes:
- *   1) Pass-and-play game (no printed cards needed). State lives in
- *      localStorage so accidental refreshes don't lose progress.
- *   2) Free play — scan a printed QR or hit "random". Same hidden player.
+ * Three modes:
+ *   1) Pass-and-play game on one device. State in localStorage.
+ *   2) Multiplayer game across phones via WebRTC (PeerJS). The host
+ *      runs audio + authoritative state; players send inputs and
+ *      receive filtered state broadcasts so they can't peek at the
+ *      answer before reveal.
+ *   3) Free play — scan a printed QR or hit "random".
  *
- * Audio plays through a YouTube IFrame positioned off-screen so the title
- * and thumbnail never leak before the player reveals.
+ * Audio plays through a YouTube IFrame positioned off-screen so the
+ * title and thumbnail never leak before the player reveals.
  */
 
 const REGION_LABEL = {
@@ -416,6 +419,536 @@ async function resumeGame() {
   renderTurn();
 }
 
+// ─── Multiplayer (WebRTC via PeerJS) ────────────────────────────────────────
+//
+// Host's phone is the authoritative game state and the only one with audio.
+// Players send inputs ("I picked slot N, reveal it") and receive filtered
+// state broadcasts. The current song is *never* shipped to non-host phones
+// until the reveal phase — otherwise players could peek at the answer in
+// devtools.
+//
+// Peer IDs are 4-char codes prefixed with "mt-" to namespace within the
+// PeerJS public cloud (avoiding global ID collisions with other apps).
+
+const MP_PREFIX = "mt-";
+const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ"; // no O/I — too easy to confuse
+let mpGame = null;     // { role, peer, ... } — populated on host or join
+let mpYtPlayer = null; // host-only audio player (separate iframe)
+
+function randomCode(len = 4) {
+  let s = "";
+  for (let i = 0; i < len; i++) {
+    s += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
+  }
+  return s;
+}
+
+// ─── HOST ───
+async function startHosting() {
+  const code = randomCode();
+  const peerId = MP_PREFIX + code;
+  const peer = new Peer(peerId, { debug: 1 });
+
+  mpGame = {
+    role: "host",
+    peer,
+    code,
+    myPeerId: peerId,
+    hostPeerId: peerId,
+    connections: new Map(), // peerId -> DataConnection (excludes host self)
+    players: [], // will include host as first entry once we know host name
+    targetScore: 10,
+    regions: ["world", "ussr", "russia", "israel"],
+    phase: "lobby",
+    used: [],
+    turnIdx: 0,
+    currentSong: null,
+    selectedSlot: null,
+    lastCorrect: null,
+    winner: null,
+  };
+
+  $("#mpHostCode").textContent = "…";
+  showScreen("mpHostLobby");
+
+  peer.on("open", (id) => {
+    $("#mpHostCode").textContent = code;
+    // Ask host for their name (use a default for now — they can edit it).
+    const hostName = prompt("Your name (host):", "Host") || "Host";
+    mpGame.players.push({
+      peerId: id,
+      name: hostName,
+      timeline: [],
+      isHost: true,
+    });
+    renderMpHostLobby();
+  });
+
+  peer.on("error", (err) => {
+    if (err.type === "unavailable-id") {
+      // ~1/500k odds even after collision-prone chars excluded, but handle it.
+      alert(`Code ${code} is taken — picking a new one.`);
+      peer.destroy();
+      mpGame = null;
+      startHosting();
+      return;
+    }
+    console.warn("PeerJS host error:", err);
+    alert("Connection error: " + (err.type || err.message || err));
+  });
+
+  peer.on("connection", (conn) => {
+    // A player connected. They'll send a 'join' message next.
+    mpGame.connections.set(conn.peer, conn);
+    conn.on("data", (msg) => handleMessageFromPlayer(conn, msg));
+    conn.on("close", () => {
+      mpGame.connections.delete(conn.peer);
+      mpGame.players = mpGame.players.filter((p) => p.peerId !== conn.peer);
+      renderMpHostLobby();
+      mpBroadcast();
+    });
+    conn.on("error", (e) => console.warn("conn error", e));
+  });
+}
+
+function handleMessageFromPlayer(conn, msg) {
+  if (!mpGame || mpGame.role !== "host") return;
+  switch (msg.type) {
+    case "join": {
+      const name = (msg.name || "Player").slice(0, 20);
+      // Add player if not already present (might be a re-join).
+      if (!mpGame.players.find((p) => p.peerId === conn.peer)) {
+        mpGame.players.push({ peerId: conn.peer, name, timeline: [] });
+      }
+      renderMpHostLobby();
+      mpBroadcast();
+      break;
+    }
+    case "lockIn": {
+      // Only honour from the player whose turn it is.
+      const cur = mpGame.players[mpGame.turnIdx];
+      if (!cur || cur.peerId !== conn.peer) return;
+      if (mpGame.phase !== "place") return;
+      mpGame.selectedSlot = msg.slotIndex;
+      mpRevealAndScore();
+      break;
+    }
+  }
+}
+
+function mpBroadcast() {
+  if (!mpGame || mpGame.role !== "host") return;
+  const pub = mpPublicState(mpGame);
+  for (const conn of mpGame.connections.values()) {
+    try { conn.send({ type: "state", state: pub }); } catch (e) {
+      console.warn("send failed", e);
+    }
+  }
+  // Host's own UI re-renders directly from its full state.
+  renderMpScreen();
+}
+
+function mpPublicState(g) {
+  const inReveal = g.phase === "reveal" || g.phase === "over";
+  return {
+    code: g.code,
+    phase: g.phase,
+    players: g.players.map((p) => ({
+      peerId: p.peerId,
+      name: p.name,
+      timeline: p.timeline,
+      isHost: !!p.isHost,
+    })),
+    targetScore: g.targetScore,
+    turnIdx: g.turnIdx,
+    hostPeerId: g.hostPeerId,
+    // Reveal the song only after lockIn. Until then players see only that
+    // a turn is in progress; the host's phone plays the audio.
+    revealedSong: inReveal && g.currentSong ? {
+      year: g.currentSong.year,
+      artist: g.currentSong.artist,
+      title: g.currentSong.title,
+      region: g.currentSong.region,
+    } : null,
+    lastCorrect: g.lastCorrect,
+    winner: g.winner,
+  };
+}
+
+async function mpStartGame() {
+  if (mpGame.players.length < 2) {
+    alert("Need at least 2 players to start.");
+    return;
+  }
+  mpGame.targetScore = parseInt($("#mpTargetScore").value, 10);
+  mpGame.regions = $$("#mpRegionGrid input:checked").map((cb) => cb.value);
+  if (mpGame.regions.length === 0) {
+    alert("Pick at least one region.");
+    return;
+  }
+  await mpEnsureHostPlayer();
+  await mpDrawNext();
+}
+
+function mpPickNextSong() {
+  const pool = verifiedSongs.filter(
+    (s) => mpGame.regions.includes(s.region) && !mpGame.used.includes(s.id)
+  );
+  if (pool.length === 0) return null;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+async function mpEnsureHostPlayer() {
+  if (mpYtPlayer) return mpYtPlayer;
+  await loadYouTubeAPI();
+  mpYtPlayer = await makePlayer("mpYt", (e) => {
+    const btn = $("#mpPlayPauseBtn");
+    if (!btn) return;
+    btn.textContent = (e.data === YT.PlayerState.PLAYING) ? "⏸" : "▶";
+  });
+  return mpYtPlayer;
+}
+
+async function mpDrawNext() {
+  const song = mpPickNextSong();
+  if (!song) { mpFinishGame(); return; }
+  mpGame.currentSong = song;
+  mpGame.selectedSlot = null;
+  mpGame.lastCorrect = null;
+  mpGame.phase = "place";
+  mpGame.used.push(song.id);
+  mpBroadcast();
+  if (mpYtPlayer && mpYtPlayer.loadVideoById) {
+    try { mpYtPlayer.loadVideoById({ videoId: song.youtube_id }); } catch {}
+    try { mpYtPlayer.unMute(); mpYtPlayer.setVolume(80); } catch {}
+  }
+}
+
+function mpRevealAndScore() {
+  if (mpGame.role !== "host") return;
+  if (!mpGame.currentSong) return;
+  if (mpYtPlayer && mpYtPlayer.pauseVideo) try { mpYtPlayer.pauseVideo(); } catch {}
+
+  const cur = mpGame.players[mpGame.turnIdx];
+  const tl = cur.timeline;
+  const i = mpGame.selectedSlot;
+  const y = mpGame.currentSong.year;
+
+  let correct;
+  if (tl.length === 0)              correct = true;
+  else if (i === 0)                 correct = y <= tl[0].year;
+  else if (i === tl.length)         correct = y >= tl[tl.length - 1].year;
+  else                              correct = y >= tl[i - 1].year && y <= tl[i].year;
+
+  if (correct) {
+    tl.splice(i, 0, {
+      id: mpGame.currentSong.id,
+      year: y,
+      artist: mpGame.currentSong.artist,
+      title: mpGame.currentSong.title,
+    });
+    tl.sort((a, b) => a.year - b.year);
+  }
+
+  mpGame.lastCorrect = correct;
+  mpGame.phase = "reveal";
+
+  if (cur.timeline.length >= mpGame.targetScore) {
+    mpGame.winner = cur.name;
+    mpGame.phase = "over";
+  }
+  mpBroadcast();
+}
+
+function mpContinue() {
+  if (mpGame.role !== "host") return;
+  if (mpGame.phase === "over") {
+    mpFinishGame();
+    return;
+  }
+  mpGame.turnIdx = (mpGame.turnIdx + 1) % mpGame.players.length;
+  mpGame.phase = "place";
+  mpGame.currentSong = null;
+  mpGame.selectedSlot = null;
+  mpGame.lastCorrect = null;
+  mpBroadcast();
+  mpDrawNext();
+}
+
+function mpFinishGame() {
+  if (!mpGame.winner) {
+    // Pool exhausted — top score wins.
+    let best = -1, name = "Nobody";
+    for (const p of mpGame.players) {
+      if (p.timeline.length > best) { best = p.timeline.length; name = p.name; }
+    }
+    mpGame.winner = name;
+  }
+  mpGame.phase = "over";
+  mpBroadcast();
+}
+
+function mpHostQuit() {
+  if (!confirm("End the multiplayer game?")) return;
+  if (mpGame && mpGame.peer) try { mpGame.peer.destroy(); } catch {}
+  if (mpYtPlayer && mpYtPlayer.stopVideo) try { mpYtPlayer.stopVideo(); } catch {}
+  mpGame = null;
+  showScreen("home");
+}
+
+// ─── PLAYER ───
+async function joinAsPlayer() {
+  const codeInput = $("#mpCodeInput").value.trim().toUpperCase();
+  const name = $("#mpNameInput").value.trim() || "Player";
+  if (!/^[A-Z]{4}$/.test(codeInput)) {
+    $("#mpJoinStatus").textContent = "Code should be 4 letters.";
+    return;
+  }
+  $("#mpJoinStatus").textContent = "Connecting…";
+  const targetId = MP_PREFIX + codeInput;
+  const peer = new Peer(undefined, { debug: 1 }); // random self ID
+
+  peer.on("open", (myId) => {
+    const conn = peer.connect(targetId, { reliable: true });
+    let opened = false;
+    const timeout = setTimeout(() => {
+      if (!opened) {
+        $("#mpJoinStatus").textContent = "Couldn't reach host. Check the code.";
+        try { conn.close(); } catch {}
+        try { peer.destroy(); } catch {}
+      }
+    }, 8000);
+    conn.on("open", () => {
+      opened = true;
+      clearTimeout(timeout);
+      mpGame = {
+        role: "player",
+        peer,
+        hostConn: conn,
+        myPeerId: myId,
+        hostPeerId: targetId,
+        code: codeInput,
+        phase: "lobby",
+        players: [],
+        targetScore: 10,
+        turnIdx: 0,
+        revealedSong: null,
+        lastCorrect: null,
+        winner: null,
+        myName: name,
+        selectedSlot: null, // local only
+      };
+      conn.send({ type: "join", name });
+      showScreen("mpPlayerLobby");
+      renderMpScreen();
+    });
+    conn.on("data", (msg) => handleMessageFromHost(msg));
+    conn.on("close", () => {
+      alert("Host disconnected.");
+      mpGame = null;
+      showScreen("home");
+    });
+    conn.on("error", (e) => {
+      console.warn("conn error", e);
+      $("#mpJoinStatus").textContent = "Connection error: " + (e.type || e.message);
+    });
+  });
+
+  peer.on("error", (err) => {
+    $("#mpJoinStatus").textContent = "Error: " + (err.type || err.message);
+    if (err.type === "peer-unavailable") {
+      $("#mpJoinStatus").textContent = "No game with that code is running.";
+    }
+  });
+}
+
+function handleMessageFromHost(msg) {
+  if (!mpGame || mpGame.role !== "player") return;
+  if (msg.type === "state") {
+    const prevPhase = mpGame.phase;
+    Object.assign(mpGame, msg.state);
+    // When the turn changes back to "place", clear our local selection.
+    if (msg.state.phase === "place" && prevPhase !== "place") {
+      mpGame.selectedSlot = null;
+    }
+    renderMpScreen();
+  }
+}
+
+function mpPlayerQuit() {
+  if (!confirm("Leave the game?")) return;
+  if (mpGame && mpGame.peer) try { mpGame.peer.destroy(); } catch {}
+  mpGame = null;
+  showScreen("home");
+}
+
+// ─── Rendering (shared) ───
+function renderMpScreen() {
+  if (!mpGame) return;
+  if (mpGame.phase === "lobby") {
+    if (mpGame.role === "host") {
+      showScreen("mpHostLobby");
+      renderMpHostLobby();
+    } else {
+      showScreen("mpPlayerLobby");
+      renderMpPlayerLobby();
+    }
+    return;
+  }
+  if (mpGame.phase === "place") {
+    showScreen("mpTurn");
+    renderMpTurn();
+    return;
+  }
+  if (mpGame.phase === "reveal") {
+    showScreen("mpReveal");
+    renderMpReveal();
+    return;
+  }
+  if (mpGame.phase === "over") {
+    showScreen("mpOver");
+    renderMpOver();
+  }
+}
+
+function renderMpHostLobby() {
+  const list = $("#mpHostPlayers");
+  list.innerHTML = "";
+  for (const p of mpGame.players) {
+    const row = document.createElement("div");
+    row.className = "player-row" + (p.peerId === mpGame.myPeerId ? " you" : "");
+    row.innerHTML = `
+      <span style="flex:1">${escapeHtml(p.name)}</span>
+      <span class="role">${p.isHost ? "host" : ""}${p.peerId === mpGame.myPeerId ? " · you" : ""}</span>`;
+    list.appendChild(row);
+  }
+  $("#mpStartBtn").disabled = mpGame.players.length < 2;
+  $("#mpTargetScoreVal").textContent = $("#mpTargetScore").value;
+}
+
+function renderMpPlayerLobby() {
+  $("#mpYouAre").textContent = mpGame.myName ? `You: ${mpGame.myName}` : "Connected";
+  const list = $("#mpClientPlayers");
+  list.innerHTML = "";
+  for (const p of mpGame.players) {
+    const row = document.createElement("div");
+    row.className = "player-row" + (p.peerId === mpGame.myPeerId ? " you" : "");
+    row.innerHTML = `
+      <span style="flex:1">${escapeHtml(p.name)}</span>
+      <span class="role">${p.isHost ? "host" : ""}${p.peerId === mpGame.myPeerId ? " · you" : ""}</span>`;
+    list.appendChild(row);
+  }
+}
+
+function renderMpTurn() {
+  const cur = mpGame.players[mpGame.turnIdx];
+  const isMyTurn = cur && cur.peerId === mpGame.myPeerId;
+  const isHost = mpGame.role === "host";
+
+  $("#mpTurnPlayerName").textContent = cur ? cur.name : "—";
+  $("#mpTurnPlayerScore").textContent = cur ? cur.timeline.length : 0;
+  $("#mpTurnPlayerTarget").textContent = mpGame.targetScore;
+
+  $("#mpPlayPauseBtn").classList.toggle("hidden", !isHost);
+  $("#mpLockInBtn").classList.toggle("hidden", !isMyTurn);
+  $("#mpTurnHint").textContent = isMyTurn
+    ? "Tap where this song fits in your timeline."
+    : `Waiting for ${cur ? cur.name : "…"} to place the card.`;
+
+  // Each phone always shows ITS OWN timeline. When it's not your turn the
+  // slot buttons are inert — you're just watching.
+  const me = mpGame.players.find((p) => p.peerId === mpGame.myPeerId);
+  const tl = me ? me.timeline : [];
+  const slotsClickable = isMyTurn;
+
+  const tlEl = $("#mpTimeline");
+  tlEl.innerHTML = "";
+  if (tl.length === 0) {
+    tlEl.appendChild(mpMakeSlotEl(0, "Place anywhere (first card is always correct)", slotsClickable));
+  } else {
+    tlEl.appendChild(mpMakeSlotEl(0, `Before ${tl[0].year}`, slotsClickable));
+    for (let i = 0; i < tl.length; i++) {
+      tlEl.appendChild(mpMakeCardEl(tl[i]));
+      const label = i < tl.length - 1
+        ? `Between ${tl[i].year} and ${tl[i + 1].year}`
+        : `After ${tl[i].year}`;
+      tlEl.appendChild(mpMakeSlotEl(i + 1, label, slotsClickable));
+    }
+  }
+
+  $("#mpLockInBtn").disabled = mpGame.selectedSlot === null;
+  $("#mpPlacementHint").textContent = isMyTurn
+    ? mpDescribePlacement(tl)
+    : "";
+}
+
+function mpMakeSlotEl(index, label, clickable) {
+  const el = document.createElement("button");
+  el.type = "button";
+  el.className = "slot" + (mpGame.selectedSlot === index ? " selected" : "");
+  el.textContent = label;
+  el.disabled = !clickable;
+  if (clickable) {
+    el.addEventListener("click", () => {
+      mpGame.selectedSlot = index;
+      renderMpTurn();
+    });
+  }
+  return el;
+}
+
+function mpMakeCardEl(card) {
+  const el = document.createElement("div");
+  el.className = "tlcard";
+  el.innerHTML = `
+    <div class="y">${card.year}</div>
+    <div class="meta">
+      <strong>${escapeHtml(card.artist)}</strong>
+      <span class="muted">${escapeHtml(card.title)}</span>
+    </div>`;
+  return el;
+}
+
+function mpDescribePlacement(tl) {
+  if (mpGame.selectedSlot === null) return "Pick a slot, then lock in.";
+  if (tl.length === 0) return "Anywhere works for the first card.";
+  const i = mpGame.selectedSlot;
+  if (i === 0) return `You think it's before ${tl[0].year}.`;
+  if (i === tl.length) return `You think it's after ${tl[tl.length - 1].year}.`;
+  return `You think it's between ${tl[i - 1].year} and ${tl[i].year}.`;
+}
+
+function renderMpReveal() {
+  const cur = mpGame.players[mpGame.turnIdx];
+  const song = (mpGame.role === "host") ? mpGame.currentSong : mpGame.revealedSong;
+  if (!song) return; // shouldn't happen
+  $("#mpRevealYear").textContent   = song.year;
+  $("#mpRevealArtist").textContent = song.artist;
+  $("#mpRevealTitle").textContent  = song.title;
+  $("#mpRevealRegion").textContent = REGION_LABEL[song.region] || song.region;
+  const rr = $("#mpRevealResult");
+  const correct = mpGame.lastCorrect;
+  rr.textContent = correct ? `✓ ${cur.name} keeps the card` : `✗ ${cur.name} misses`;
+  rr.classList.toggle("good", correct);
+  rr.classList.toggle("bad", !correct);
+  const isHost = mpGame.role === "host";
+  $("#mpContinueBtn").classList.toggle("hidden", !isHost);
+  $("#mpContinueWait").classList.toggle("hidden", isHost);
+}
+
+function renderMpOver() {
+  $("#mpWinnerName").textContent = mpGame.winner || "Nobody";
+  const fs = $("#mpFinalScores");
+  fs.innerHTML = "";
+  const sorted = [...mpGame.players].sort((a, b) => b.timeline.length - a.timeline.length);
+  for (const p of sorted) {
+    const row = document.createElement("div");
+    row.className = "row";
+    row.innerHTML = `<span>${escapeHtml(p.name)}</span><strong>${p.timeline.length}</strong>`;
+    fs.appendChild(row);
+  }
+}
+
 // ─── Free-play scanner + player (unchanged behaviour, separate iframe) ──────
 function parseQrPayload(text) {
   if (!text) return null;
@@ -519,6 +1052,39 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   $("#gameBtn").addEventListener("click", openSetup);
   $("#resumeBtn").addEventListener("click", resumeGame);
+  $("#hostBtn").addEventListener("click", startHosting);
+  $("#joinBtn").addEventListener("click", () => {
+    $("#mpJoinStatus").textContent = "";
+    $("#mpCodeInput").value = "";
+    $("#mpNameInput").value = "";
+    showScreen("mpJoin");
+  });
+  $("#mpJoinBtn").addEventListener("click", joinAsPlayer);
+  $("#mpStartBtn").addEventListener("click", mpStartGame);
+  $("#mpTargetScore").addEventListener("input", (e) => {
+    $("#mpTargetScoreVal").textContent = e.target.value;
+  });
+  $("#mpHostQuitBtn").addEventListener("click", mpHostQuit);
+  $("#mpPlayerQuitBtn").addEventListener("click", mpPlayerQuit);
+  $("#mpQuitTurnBtn").addEventListener("click", () => {
+    if (mpGame && mpGame.role === "host") mpHostQuit();
+    else mpPlayerQuit();
+  });
+  $("#mpLockInBtn").addEventListener("click", () => {
+    if (!mpGame || mpGame.selectedSlot === null) return;
+    if (mpGame.role === "host") {
+      mpRevealAndScore();
+    } else {
+      try { mpGame.hostConn.send({ type: "lockIn", slotIndex: mpGame.selectedSlot }); } catch {}
+    }
+  });
+  $("#mpContinueBtn").addEventListener("click", mpContinue);
+  $("#mpPlayPauseBtn").addEventListener("click", () => {
+    if (!mpYtPlayer) return;
+    const s = mpYtPlayer.getPlayerState && mpYtPlayer.getPlayerState();
+    if (s === 1) mpYtPlayer.pauseVideo();
+    else         mpYtPlayer.playVideo();
+  });
   $("#scanBtn").addEventListener("click", startScanner);
   $("#randomBtn").addEventListener("click", () => {
     const s = pickRandomVerified();

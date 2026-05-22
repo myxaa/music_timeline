@@ -16,10 +16,115 @@
       <p class="muted">Phone-only Hitster: pass and play, no printed cards needed.</p>
       <button id="gameBtn" class="primary">Start a game</button>
       <button id="resumeBtn" class="ghost hidden">Resume saved game</button>
+      <button id="hostBtn" class="ghost">Host multiplayer game</button>
+      <button id="joinBtn" class="ghost">Join multiplayer game</button>
       <div class="divider"><span>or free play</span></div>
       <button id="scanBtn" class="ghost">Scan a card</button>
       <button id="randomBtn" class="ghost">Play a random song</button>
       <p class="tiny muted" id="dbStatus">Loading songs…</p>
+    </section>
+
+    <!-- ─── MULTIPLAYER: JOIN ───────────────────────────────────────────── -->
+    <section id="mpJoin" class="screen">
+      <button class="close" data-screen="home" aria-label="Close">✕</button>
+      <h2>Join game</h2>
+      <label class="field">
+        <span>Game code</span>
+        <input id="mpCodeInput" class="bigcode" type="text" maxlength="4" autocapitalize="characters" autocomplete="off" placeholder="ABCD" />
+      </label>
+      <label class="field">
+        <span>Your name</span>
+        <input id="mpNameInput" type="text" maxlength="20" placeholder="Your name" />
+      </label>
+      <button id="mpJoinBtn" class="primary">Join</button>
+      <p id="mpJoinStatus" class="muted small"></p>
+    </section>
+
+    <!-- ─── MULTIPLAYER: HOST LOBBY ─────────────────────────────────────── -->
+    <section id="mpHostLobby" class="screen">
+      <button class="close" data-screen="home" aria-label="Close" id="mpHostQuitBtn">✕</button>
+      <p class="muted">Share this code with players at your table.</p>
+      <div class="bigcode-display" id="mpHostCode">…</div>
+      <p class="small muted">They open the app, tap "Join multiplayer game", and enter the code.</p>
+
+      <div class="field">
+        <span>Players</span>
+        <div class="players-list" id="mpHostPlayers"></div>
+      </div>
+
+      <div class="field">
+        <span>First to <strong id="mpTargetScoreVal">10</strong> cards</span>
+        <input id="mpTargetScore" type="range" min="3" max="20" value="10" />
+      </div>
+
+      <div class="field">
+        <span>Songs from</span>
+        <div class="region-grid" id="mpRegionGrid">
+          <label><input type="checkbox" value="world"  checked /> World</label>
+          <label><input type="checkbox" value="ussr"   checked /> USSR</label>
+          <label><input type="checkbox" value="russia" checked /> Russia</label>
+          <label><input type="checkbox" value="israel" checked /> Israel</label>
+        </div>
+      </div>
+
+      <button id="mpStartBtn" class="primary" disabled>Start game</button>
+    </section>
+
+    <!-- ─── MULTIPLAYER: PLAYER LOBBY ───────────────────────────────────── -->
+    <section id="mpPlayerLobby" class="screen">
+      <button class="close" data-screen="home" aria-label="Close" id="mpPlayerQuitBtn">✕</button>
+      <h2 id="mpYouAre">Connected</h2>
+      <p class="muted">Waiting for the host to start the game…</p>
+      <div class="field">
+        <span>Players in lobby</span>
+        <div class="players-list" id="mpClientPlayers"></div>
+      </div>
+    </section>
+
+    <!-- ─── MULTIPLAYER: TURN ───────────────────────────────────────────── -->
+    <section id="mpTurn" class="screen turnscreen">
+      <header class="turnheader">
+        <button class="close small" id="mpQuitTurnBtn" aria-label="Quit">✕</button>
+        <div class="turnplayer">
+          <div class="turnplayer-name" id="mpTurnPlayerName">Player 1</div>
+          <div class="turnplayer-score muted"><span id="mpTurnPlayerScore">0</span> / <span id="mpTurnPlayerTarget">10</span></div>
+        </div>
+        <div class="turn-actions">
+          <button id="mpPlayPauseBtn" class="iconbtn hidden" aria-label="Pause">⏸</button>
+        </div>
+      </header>
+
+      <!-- Audio only renders on the host (DJ) phone -->
+      <div id="mpYtwrap" aria-hidden="true"><div id="mpYt"></div></div>
+
+      <p class="muted hint" id="mpTurnHint">Tap where this song fits in your timeline.</p>
+      <div id="mpTimeline" class="timeline"></div>
+
+      <div class="turn-footer">
+        <p id="mpPlacementHint" class="muted small"></p>
+        <button id="mpLockInBtn" class="warn hidden" disabled>Reveal &amp; lock in</button>
+      </div>
+    </section>
+
+    <!-- ─── MULTIPLAYER: REVEAL ─────────────────────────────────────────── -->
+    <section id="mpReveal" class="screen">
+      <div class="reveal-card">
+        <div class="reveal-result" id="mpRevealResult"></div>
+        <div class="reveal-year"   id="mpRevealYear"></div>
+        <div class="reveal-artist" id="mpRevealArtist"></div>
+        <div class="reveal-title"  id="mpRevealTitle"></div>
+        <div class="reveal-region muted" id="mpRevealRegion"></div>
+      </div>
+      <button id="mpContinueBtn" class="primary hidden">Pass to next player</button>
+      <p id="mpContinueWait" class="muted small">Waiting for host to continue…</p>
+    </section>
+
+    <!-- ─── MULTIPLAYER: GAME OVER ──────────────────────────────────────── -->
+    <section id="mpOver" class="screen">
+      <h1 id="mpWinnerName"></h1>
+      <p class="muted">wins!</p>
+      <div id="mpFinalScores" class="scores"></div>
+      <button data-screen="home" class="ghost">Home</button>
     </section>
 
     <!-- ─── GAME SETUP ──────────────────────────────────────────────────── -->
@@ -128,6 +233,7 @@
   </main>
 
   <script src="https://unpkg.com/html5-qrcode@2.3.10/html5-qrcode.min.js"></script>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
