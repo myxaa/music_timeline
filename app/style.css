@@ -395,6 +395,23 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   background: #000;
 }
 
+.qr-file-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 12px 20px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 0.9rem;
+  width: 100%;
+  max-width: 420px;
+}
+.qr-file-label:hover { border-color: var(--accent); color: var(--fg); }
+.qr-file-label input { display: none; }
+
 /* ─── Multiplayer ───────────────────────────────────────────────────────── */
 .bigcode-display {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;

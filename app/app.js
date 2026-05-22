@@ -1392,7 +1392,7 @@ function renderMpOver() {
   }
 }
 
-// ─── Free-play scanner + player (unchanged behaviour, separate iframe) ──────
+// ─── Free-play scanner + player ─────────────────────────────────────────────
 function parseQrPayload(text) {
   if (!text) return null;
   text = text.trim();
@@ -1401,34 +1401,57 @@ function parseQrPayload(text) {
     const u = new URL(text);
     const id = u.searchParams.get("id");
     if (id) return id;
+    const join = u.searchParams.get("join");
+    if (join) return null; // join URL, not a song card — ignore in free play
   } catch {}
   if (/^[wri]\d{3}$/i.test(text) || /^o\d{3}$/i.test(text)) return text;
   return null;
 }
 
+function onQrDecoded(decoded) {
+  const id = parseQrPayload(decoded);
+  if (!id) return;
+  const song = songsById.get(id);
+  if (!song) { alert(t("mp.unknownCard", { id })); return; }
+  stopScanner();
+  freePlay(song);
+}
+
 async function startScanner() {
   showScreen("scanner");
   if (qrScanner) await stopScanner();
+  // Always hide the file fallback when first opening scanner.
+  $("#qrFileFallback").classList.add("hidden");
+  $("#scanHint").textContent = t("free.cameraRetrying");
+
   qrScanner = new Html5Qrcode("reader");
   const config = { fps: 12, qrbox: { width: 240, height: 240 } };
-  try {
-    await qrScanner.start(
-      { facingMode: "environment" },
-      config,
-      (decoded) => {
-        const id = parseQrPayload(decoded);
-        if (!id) return;
-        const song = songsById.get(id);
-        if (!song) { alert(t("mp.unknownCard", { id })); return; }
-        stopScanner();
-        freePlay(song);
-      },
-      () => {}
-    );
-  } catch (e) {
-    alert(t("free.cameraError", { msg: e.message }));
-    showScreen("home");
+
+  // Firefox Mobile rejects { facingMode:"environment" } without prompting.
+  // Walk through constraints from most-specific to most-permissive.
+  const constraints = [
+    { facingMode: { ideal: "environment" } }, // prefer rear, don't require it
+    { facingMode: "environment" },
+    { facingMode: "user" },
+    true,                                       // any camera
+  ];
+
+  for (const cam of constraints) {
+    try {
+      await qrScanner.start(cam, config, onQrDecoded, () => {});
+      $("#scanHint").textContent = t("free.scanHint");
+      return; // success — stop trying
+    } catch (e) {
+      console.warn("camera constraint failed:", cam, e.name, e.message);
+      // If the element was already partially initialised, reset it.
+      try { await qrScanner.stop(); } catch {}
+    }
   }
+
+  // All camera attempts failed — show file-input fallback.
+  $("#scanHint").textContent = t("free.cameraError", { msg: t("free.orUploadQr") });
+  $("#qrFileFallback").classList.remove("hidden");
+  qrScanner = null;
 }
 
 async function stopScanner() {
@@ -1436,6 +1459,17 @@ async function stopScanner() {
   try { await qrScanner.stop(); } catch {}
   try { await qrScanner.clear(); } catch {}
   qrScanner = null;
+}
+
+// File-input fallback: decode a QR from a chosen image using Html5Qrcode.
+async function handleQrFile(file) {
+  if (!file) return;
+  try {
+    const result = await Html5Qrcode.scanFile(file, /* showImage= */ false);
+    onQrDecoded(result);
+  } catch (e) {
+    alert(t("free.cameraError", { msg: e.message }));
+  }
 }
 
 async function ensureFreePlayer() {
@@ -1540,6 +1574,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     else         mpYtPlayer.playVideo();
   });
   $("#scanBtn").addEventListener("click", startScanner);
+  $("#qrFileInput").addEventListener("change", (e) => handleQrFile(e.target.files[0]));
   $("#randomBtn").addEventListener("click", () => {
     const s = pickRandomVerified();
     if (s) freePlay(s);

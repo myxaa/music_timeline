@@ -130,6 +130,8 @@ const I18N = {
     "game.playerDefault": "Player {n}",
 
     "free.scanHint": "Point the camera at the QR code on the back of a card.",
+    "free.orUploadQr": "Or upload a photo of the QR code",
+    "free.cameraRetrying": "Trying camera…",
     "free.nowPlaying": "Now playing…",
     "free.revealHint": "Reveal when you're ready.",
     "free.coverSub": "Place this on your timeline before revealing.",
@@ -239,6 +241,8 @@ const I18N = {
     "game.playerDefault": "Игрок {n}",
 
     "free.scanHint": "Наведите камеру на QR-код на обратной стороне карты.",
+    "free.orUploadQr": "Или загрузите фото QR-кода",
+    "free.cameraRetrying": "Включаем камеру…",
     "free.nowPlaying": "Сейчас играет…",
     "free.revealHint": "Откройте ответ, когда будете готовы.",
     "free.coverSub": "Поставьте на свою линию времени, прежде чем открывать.",
@@ -423,6 +427,8 @@ const I18N = {
     "game.playerDefault": "שחקן {n}",
 
     "free.scanHint": "הפנה את המצלמה לקוד ה-QR בגב הקלף.",
+    "free.orUploadQr": "או העלה תמונה של קוד ה-QR",
+    "free.cameraRetrying": "מפעיל מצלמה…",
     "free.nowPlaying": "מתנגן כעת…",
     "free.revealHint": "גלה כשתהיה מוכן.",
     "free.unverified": "השיר הזה עדיין לא אומת.",

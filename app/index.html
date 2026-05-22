@@ -229,7 +229,12 @@
     <section id="scanner" class="screen">
       <button class="close" data-screen="home" data-i18n-aria-label="game.home" aria-label="Close">✕</button>
       <div id="reader"></div>
-      <p class="muted" data-i18n="free.scanHint">Point the camera at the QR code on the back of a card.</p>
+      <p class="muted" id="scanHint" data-i18n="free.scanHint">Point the camera at the QR code on the back of a card.</p>
+      <!-- File-input fallback shown when camera is unavailable (e.g. FF Mobile) -->
+      <label id="qrFileFallback" class="hidden qr-file-label">
+        <span data-i18n="free.orUploadQr">Or upload a photo of the QR code</span>
+        <input id="qrFileInput" type="file" accept="image/*" />
+      </label>
     </section>
 
     <!-- ─── FREE PLAY PLAYER ────────────────────────────────────────────── -->
