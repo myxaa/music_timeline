@@ -443,6 +443,73 @@ function randomCode(len = 4) {
   return s;
 }
 
+function joinUrlFor(code) {
+  // origin + path with ?join=<code>, stripped of any existing query/hash so
+  // a host who deep-linked here doesn't pass that on to invitees.
+  const u = new URL(location.href);
+  u.search = "";
+  u.hash = "";
+  u.searchParams.set("join", code);
+  return u.toString();
+}
+
+function setupShareUI(code) {
+  const url = joinUrlFor(code);
+  $("#mpShareLink").value = url;
+
+  // Render QR onto the canvas (qrcode lib loaded via CDN).
+  const canvas = $("#mpQrCanvas");
+  if (window.QRCode && canvas) {
+    window.QRCode.toCanvas(canvas, url, {
+      width: 200,
+      margin: 1,
+      color: { dark: "#000000", light: "#ffffff" },
+    }, (err) => {
+      if (err) {
+        console.warn("QR generation failed:", err);
+        return;
+      }
+      canvas.classList.remove("hidden");
+    });
+  }
+
+  // Surface the native share sheet on phones; on desktop fall back to copy.
+  if (navigator.share) {
+    $("#mpShareBtn").classList.remove("hidden");
+  }
+}
+
+async function shareJoinUrl() {
+  const url = $("#mpShareLink").value;
+  if (!url) return;
+  try {
+    await navigator.share({
+      title: "Music Timeline",
+      text: `Join my music game (code ${mpGame.code})`,
+      url,
+    });
+  } catch (e) {
+    // user cancelled, ignore
+  }
+}
+
+async function copyJoinUrl() {
+  const url = $("#mpShareLink").value;
+  if (!url) return;
+  try {
+    await navigator.clipboard.writeText(url);
+    const btn = $("#mpCopyLinkBtn");
+    const orig = btn.textContent;
+    btn.textContent = "Copied ✓";
+    setTimeout(() => { btn.textContent = orig; }, 1200);
+  } catch {
+    // clipboard API blocked (e.g., HTTP origin) — select-all so user can copy
+    const input = $("#mpShareLink");
+    input.focus();
+    input.select();
+  }
+}
+
 // ─── HOST ───
 async function startHosting() {
   const code = randomCode();
@@ -481,6 +548,7 @@ async function startHosting() {
       timeline: [],
       isHost: true,
     });
+    setupShareUI(code);
     renderMpHostLobby();
   });
 
@@ -1066,6 +1134,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
   $("#mpHostQuitBtn").addEventListener("click", mpHostQuit);
   $("#mpPlayerQuitBtn").addEventListener("click", mpPlayerQuit);
+  $("#mpCopyLinkBtn").addEventListener("click", copyJoinUrl);
+  $("#mpShareBtn").addEventListener("click", shareJoinUrl);
   $("#mpQuitTurnBtn").addEventListener("click", () => {
     if (mpGame && mpGame.role === "host") mpHostQuit();
     else mpPlayerQuit();
@@ -1128,12 +1198,21 @@ document.addEventListener("DOMContentLoaded", async () => {
     el.addEventListener("click", () => showScreen(el.dataset.screen));
   });
 
-  // ?id=… deep-link still works for free play (scanning through native camera).
+  // Deep links:
+  //   ?id=<song-id>  → free-play a specific song (scan flow w/ native camera)
+  //   ?join=<code>   → jump straight to the join screen with the code prefilled
   const params = new URLSearchParams(location.search);
   const linkedId = params.get("id");
   if (linkedId) {
     const song = songsById.get(linkedId);
     if (song) freePlay(song);
+  }
+  const joinCode = (params.get("join") || "").trim().toUpperCase();
+  if (/^[A-Z]{4}$/.test(joinCode)) {
+    showScreen("mpJoin");
+    $("#mpCodeInput").value = joinCode;
+    // Focus the name field — they only need to fill that in.
+    setTimeout(() => $("#mpNameInput").focus(), 50);
   }
 
   if ("serviceWorker" in navigator) {

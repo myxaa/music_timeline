@@ -43,9 +43,19 @@
     <!-- ─── MULTIPLAYER: HOST LOBBY ─────────────────────────────────────── -->
     <section id="mpHostLobby" class="screen">
       <button class="close" data-screen="home" aria-label="Close" id="mpHostQuitBtn">✕</button>
-      <p class="muted">Share this code with players at your table.</p>
+      <p class="muted">Share with players at your table.</p>
       <div class="bigcode-display" id="mpHostCode">…</div>
-      <p class="small muted">They open the app, tap "Join multiplayer game", and enter the code.</p>
+
+      <div class="share-row">
+        <canvas id="mpQrCanvas" width="200" height="200" class="qrcanvas hidden"></canvas>
+        <div class="share-actions">
+          <input id="mpShareLink" class="share-link" readonly />
+          <button id="mpCopyLinkBtn" class="ghost small">Copy link</button>
+          <button id="mpShareBtn" class="ghost small hidden">Share…</button>
+        </div>
+      </div>
+
+      <p class="small muted">Or they can open the app, tap "Join multiplayer game", and enter the code manually.</p>
 
       <div class="field">
         <span>Players</span>
@@ -234,6 +244,7 @@
 
   <script src="https://unpkg.com/html5-qrcode@2.3.10/html5-qrcode.min.js"></script>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
