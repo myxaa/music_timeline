@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.env
+
+# Build artefacts — regenerable from scripts/.
+cards/*.pdf
+
+# Editor / OS cruft
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Local logs / state
+data/verify.log
+
+# Claude Code session files
+.claude/

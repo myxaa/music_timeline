@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0b10" />
+  <link rel="manifest" href="manifest.json" />
+  <title>Music Timeline</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main id="app">
+    <!-- ─── HOME ────────────────────────────────────────────────────────── -->
+    <section id="home" class="screen active">
+      <h1>Music Timeline</h1>
+      <p class="muted">Phone-only Hitster: pass and play, no printed cards needed.</p>
+      <button id="gameBtn" class="primary">Start a game</button>
+      <button id="resumeBtn" class="ghost hidden">Resume saved game</button>
+      <div class="divider"><span>or free play</span></div>
+      <button id="scanBtn" class="ghost">Scan a card</button>
+      <button id="randomBtn" class="ghost">Play a random song</button>
+      <p class="tiny muted" id="dbStatus">Loading songs…</p>
+    </section>
+
+    <!-- ─── GAME SETUP ──────────────────────────────────────────────────── -->
+    <section id="gameSetup" class="screen">
+      <button class="close" data-screen="home" aria-label="Close">✕</button>
+      <h2>New game</h2>
+
+      <label class="field">
+        <span>Players</span>
+        <div class="players-list" id="playersList"></div>
+        <button id="addPlayerBtn" class="ghost small">+ Add player</button>
+      </label>
+
+      <label class="field">
+        <span>First to <strong id="targetScoreVal">10</strong> cards</span>
+        <input id="targetScore" type="range" min="3" max="20" value="10" />
+      </label>
+
+      <label class="field">
+        <span>Songs from</span>
+        <div class="region-grid" id="regionGrid">
+          <label><input type="checkbox" value="world"  checked /> World</label>
+          <label><input type="checkbox" value="ussr"   checked /> USSR</label>
+          <label><input type="checkbox" value="russia" checked /> Russia</label>
+          <label><input type="checkbox" value="israel" checked /> Israel</label>
+        </div>
+      </label>
+
+      <button id="startGameBtn" class="primary">Start game</button>
+    </section>
+
+    <!-- ─── GAME: TURN ──────────────────────────────────────────────────── -->
+    <section id="gameTurn" class="screen turnscreen">
+      <header class="turnheader">
+        <button class="close small" id="quitGameBtn" aria-label="Quit">✕</button>
+        <div class="turnplayer">
+          <div class="turnplayer-name" id="turnPlayerName">Player 1</div>
+          <div class="turnplayer-score muted"><span id="turnPlayerScore">0</span> / <span id="turnPlayerTarget">10</span></div>
+        </div>
+        <div class="turn-actions">
+          <button id="playPauseBtn" class="iconbtn" aria-label="Pause">⏸</button>
+        </div>
+      </header>
+
+      <!-- Hidden YouTube iframe — produces audio while off-screen. -->
+      <div id="ytwrap" aria-hidden="true"><div id="yt"></div></div>
+
+      <p class="muted hint">Tap where this song fits in your timeline.</p>
+      <div id="timeline" class="timeline"></div>
+
+      <div class="turn-footer">
+        <p id="placementHint" class="muted small">No card selected yet.</p>
+        <button id="lockInBtn" class="warn" disabled>Reveal &amp; lock in</button>
+      </div>
+    </section>
+
+    <!-- ─── GAME: REVEAL ────────────────────────────────────────────────── -->
+    <section id="gameReveal" class="screen">
+      <div class="reveal-card" id="revealCard">
+        <div class="reveal-result" id="revealResult"></div>
+        <div class="reveal-year"   id="revealYear"></div>
+        <div class="reveal-artist" id="revealArtist"></div>
+        <div class="reveal-title"  id="revealTitle"></div>
+        <div class="reveal-region muted" id="revealRegion"></div>
+      </div>
+      <button id="continueBtn" class="primary">Pass to next player</button>
+    </section>
+
+    <!-- ─── GAME OVER ───────────────────────────────────────────────────── -->
+    <section id="gameOver" class="screen">
+      <h1 id="winnerName"></h1>
+      <p class="muted">wins!</p>
+      <div id="finalScores" class="scores"></div>
+      <button id="playAgainBtn" class="primary">Play again</button>
+      <button data-screen="home" class="ghost">Home</button>
+    </section>
+
+    <!-- ─── FREE PLAY SCANNER ───────────────────────────────────────────── -->
+    <section id="scanner" class="screen">
+      <button class="close" data-screen="home" aria-label="Close">✕</button>
+      <div id="reader"></div>
+      <p class="muted">Point the camera at the QR code on the back of a card.</p>
+    </section>
+
+    <!-- ─── FREE PLAY PLAYER ────────────────────────────────────────────── -->
+    <section id="freePlayer" class="screen">
+      <button class="close" data-screen="home" aria-label="Close">✕</button>
+      <div id="freeYtWrap" aria-hidden="true"><div id="freeYt"></div></div>
+      <div class="cover">
+        <div class="vinyl" id="freeVinyl" aria-hidden="true"></div>
+        <p class="cover-text">Now playing…</p>
+        <p class="cover-sub muted">Reveal when you're ready.</p>
+      </div>
+      <div class="controls">
+        <button id="freePlayPauseBtn" class="primary">⏸ Pause</button>
+        <button id="freeRevealBtn" class="warn">Reveal answer</button>
+      </div>
+      <div id="freeAnswer" class="answer hidden">
+        <div class="year"   id="freeAnsYear"></div>
+        <div class="artist" id="freeAnsArtist"></div>
+        <div class="title"  id="freeAnsTitle"></div>
+        <div class="region muted" id="freeAnsRegion"></div>
+        <button data-screen="home" class="ghost">Done</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://unpkg.com/html5-qrcode@2.3.10/html5-qrcode.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
