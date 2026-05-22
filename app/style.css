@@ -65,7 +65,8 @@ button {
   border: 0;
   padding: 14px 24px;
   border-radius: 999px;
-  min-width: 240px;
+  /* min(240px, 100%) keeps large buttons from blowing past a narrow screen. */
+  min-width: min(240px, 100%);
   cursor: pointer;
   font-weight: 600;
   font-size: 1rem;
@@ -124,7 +125,11 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: min(420px, 92vw);
+  /* 100% = parent's content width (padding already excluded); capped at 420px.
+     Using vw here was the cause of horizontal scroll on narrow phones because
+     92vw (345px on 375px screen) > content width (327px after 24px*2 padding). */
+  width: 100%;
+  max-width: 420px;
   text-align: left;
 }
 .field > span:first-child {
@@ -205,7 +210,8 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   flex-direction: column;
   align-items: stretch;
   gap: 0;
-  width: min(560px, 94vw);
+  width: 100%;
+  max-width: 560px;
   max-height: 60vh;
   overflow-y: auto;
   padding: 4px;
@@ -264,7 +270,8 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 }
 
 .turn-footer {
-  width: min(560px, 94vw);
+  width: 100%;
+  max-width: 560px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -290,7 +297,8 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   background: var(--card);
   border-radius: var(--radius);
   padding: 28px 24px;
-  width: min(420px, 92vw);
+  width: 100%;
+  max-width: 420px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -319,7 +327,8 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   display: flex;
   flex-direction: column;
   gap: 6px;
-  width: min(360px, 90vw);
+  width: 100%;
+  max-width: 360px;
   margin: 12px 0;
 }
 .scores .row {
@@ -367,7 +376,8 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   padding: 24px;
   background: var(--card);
   border-radius: var(--radius);
-  width: min(420px, 90vw);
+  width: 100%;
+  max-width: 420px;
 }
 .answer .year   { font-size: 4rem; font-weight: 800; line-height: 1; color: var(--accent); }
 .answer .artist { font-size: 1.4rem; font-weight: 700; margin-top: 8px; }
@@ -376,7 +386,8 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .answer button  { margin-top: 20px; }
 
 #reader {
-  width: min(420px, 90vw);
+  width: 100%;
+  max-width: 420px;
   aspect-ratio: 1 / 1;
   max-height: 70vh;
   border-radius: var(--radius);
@@ -426,7 +437,8 @@ input[type="text"]:not(.bigcode):focus { border-color: var(--accent); }
 .share-row {
   display: flex;
   gap: 16px;
-  width: min(420px, 92vw);
+  width: 100%;
+  max-width: 420px;
   align-items: center;
 }
 .share-actions {
