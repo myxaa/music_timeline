@@ -1417,11 +1417,42 @@ function onQrDecoded(decoded) {
   freePlay(song);
 }
 
+// ─── Camera debug helpers ────────────────────────────────────────────────────
+let _dbgLines = [];
+function dbg(msg) {
+  const ts = new Date().toISOString().slice(11, 23);
+  _dbgLines.push(`[${ts}] ${msg}`);
+  const el = document.getElementById("cameraDebugLog");
+  if (el) el.textContent = _dbgLines.slice(-30).join("\n");
+  console.log("[cam]", msg);
+}
+
+async function runCameraEnvCheck() {
+  _dbgLines = [];
+  dbg(`UA: ${navigator.userAgent.slice(0, 80)}`);
+  dbg(`mediaDevices: ${"mediaDevices" in navigator ? "YES" : "NO"}`);
+  dbg(`getUserMedia: ${!!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) ? "YES" : "NO"}`);
+  if (navigator.permissions) {
+    try {
+      const p = await navigator.permissions.query({ name: "camera" });
+      dbg(`permissions API camera: ${p.state}`);
+    } catch (e) {
+      dbg(`permissions API: ${e.name} (${e.message})`);
+    }
+  } else {
+    dbg("permissions API: not supported");
+  }
+  dbg(`protocol: ${location.protocol}`);
+  dbg(`hostname: ${location.hostname}`);
+}
+
 async function startScanner() {
   showScreen("scanner");
   if (qrScanner) await stopScanner();
   $("#qrFileFallback").classList.add("hidden");
   $("#scanHint").textContent = t("free.cameraRetrying");
+
+  await runCameraEnvCheck();
 
   // Step 1: use the native getUserMedia to get the browser to show its
   // camera permission prompt. html5-qrcode.start() silently resolves on
@@ -1434,32 +1465,33 @@ async function startScanner() {
   ];
 
   let stream = null;
-  for (const c of attempts) {
+  for (let i = 0; i < attempts.length; i++) {
+    const c = attempts[i];
+    dbg(`getUserMedia attempt ${i + 1}/${attempts.length}: ${JSON.stringify(c)}`);
     try {
       stream = await navigator.mediaDevices.getUserMedia(c);
+      dbg(`✓ getUserMedia success — tracks: ${stream.getTracks().map(t => t.kind + "/" + t.label).join(", ")}`);
       break;
     } catch (e) {
+      dbg(`✗ ${e.name}: ${e.message}`);
       if (e.name === "NotAllowedError" || e.name === "PermissionDeniedError") {
-        // User explicitly denied — stop immediately.
         $("#scanHint").textContent = t("free.cameraError", { msg: "Camera access denied" });
         $("#qrFileFallback").classList.remove("hidden");
         return;
       }
-      // NotFoundError, OverconstrainedError, etc. — try the next constraint.
-      console.warn("getUserMedia failed:", e.name, e.message);
     }
   }
 
   if (!stream) {
-    // No camera available at all.
+    dbg("All getUserMedia attempts failed → showing file fallback");
     $("#scanHint").textContent = t("free.cameraError", { msg: "No camera found" });
     $("#qrFileFallback").classList.remove("hidden");
     return;
   }
 
-  // Step 2: permission granted. Stop the probe stream and hand control to
-  // html5-qrcode which manages its own stream internally.
+  // Step 2: permission confirmed — release probe stream, let html5-qrcode take over.
   stream.getTracks().forEach((t) => t.stop());
+  dbg("Probe stream released. Starting html5-qrcode…");
 
   qrScanner = new Html5Qrcode("reader");
   try {
@@ -1469,10 +1501,10 @@ async function startScanner() {
       onQrDecoded,
       () => {}
     );
+    dbg("✓ html5-qrcode started");
     $("#scanHint").textContent = t("free.scanHint");
   } catch (e) {
-    // html5-qrcode failed despite having permission — very rare.
-    console.warn("html5-qrcode.start failed:", e.name, e.message);
+    dbg(`✗ html5-qrcode.start: ${e.name}: ${e.message}`);
     $("#scanHint").textContent = t("free.cameraError", { msg: e.message });
     $("#qrFileFallback").classList.remove("hidden");
     qrScanner = null;

@@ -6,16 +6,23 @@
   <meta name="theme-color" content="#0b0b10" />
   <link rel="manifest" href="manifest.json" />
   <title>Music Timeline</title>
-  <link rel="stylesheet" href="style.css?v=20260522c" />
+  <!-- Google Fonts: Outfit for UI text, Bebas Neue for big numbers -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css?v=20260522d" />
   <!-- i18n runs before app.js so <html lang/dir> are set and t() exists. -->
-  <script src="i18n.js?v=20260522c"></script>
+  <script src="i18n.js?v=20260522d"></script>
 </head>
 <body>
   <main id="app">
     <!-- ─── HOME ────────────────────────────────────────────────────────── -->
     <section id="home" class="screen active">
-      <h1 data-i18n="home.title">Music Timeline</h1>
-      <p class="muted" data-i18n="home.subtitle">Phone-only Hitster: pass and play, no printed cards needed.</p>
+      <div class="home-hero">
+        <div class="hero-vinyl vinyl" aria-hidden="true"></div>
+        <h1 data-i18n="home.title">Music Timeline</h1>
+        <p class="muted" data-i18n="home.subtitle">Phone-only Hitster: pass and play, no printed cards needed.</p>
+      </div>
       <button id="gameBtn" class="primary" data-i18n="home.start">Start a game</button>
       <button id="resumeBtn" class="ghost hidden" data-i18n="home.resume">Resume saved game</button>
       <button id="resumeHostBtn" class="ghost hidden" data-i18n="home.resumeHost">Resume hosted game</button>
@@ -26,6 +33,28 @@
       <button id="scanBtn" class="ghost" data-i18n="home.scan">Scan a card</button>
       <button id="randomBtn" class="ghost" data-i18n="home.random">Play a random song</button>
       <p class="tiny muted" id="dbStatus" data-i18n="home.loading">Loading songs…</p>
+
+      <!-- Print cards section -->
+      <div class="divider"><span data-i18n="home.printSection">print cards</span></div>
+      <details class="print-section" id="printSection">
+        <summary class="print-toggle" data-i18n="home.printToggle">Print cards</summary>
+        <div class="print-buttons">
+          <button class="ghost small print-btn" id="printAllBtn" data-i18n="home.printAll">Print All</button>
+          <button class="ghost small print-btn" id="printWorldBtn" data-i18n="home.printWorld">Print World</button>
+          <button class="ghost small print-btn" id="printRussiaBtn" data-i18n="home.printRussia">Print Russia/USSR</button>
+          <button class="ghost small print-btn" id="printIsraelBtn" data-i18n="home.printIsrael">Print Israel</button>
+          <details class="print-custom-wrap">
+            <summary class="ghost small print-btn" data-i18n="home.printCustom">Print Custom</summary>
+            <div class="print-custom-panel">
+              <label><input type="checkbox" id="pcWorld"  value="world"  checked /> <span data-i18n="region.world">World</span></label>
+              <label><input type="checkbox" id="pcUssr"   value="ussr"   checked /> <span data-i18n="region.ussr">USSR</span></label>
+              <label><input type="checkbox" id="pcRussia" value="russia" checked /> <span data-i18n="region.russia">Russia</span></label>
+              <label><input type="checkbox" id="pcIsrael" value="israel" checked /> <span data-i18n="region.israel">Israel</span></label>
+              <button class="primary small" id="printCustomBtn" data-i18n="home.printGo">Generate PDF</button>
+            </div>
+          </details>
+        </div>
+      </details>
     </section>
 
     <!-- ─── MULTIPLAYER: JOIN ───────────────────────────────────────────── -->
@@ -121,6 +150,7 @@
       <div id="mpYtwrap" aria-hidden="true"><div id="mpYt"></div></div>
 
       <p class="muted hint" id="mpTurnHint" data-i18n="game.tapWhere">Tap where this song fits in your timeline.</p>
+      <div class="timeline-rail" aria-hidden="true"><span class="timeline-rail-dot"></span></div>
       <div id="mpTimeline" class="timeline"></div>
 
       <div class="turn-footer">
@@ -196,6 +226,7 @@
       <div id="ytwrap" aria-hidden="true"><div id="yt"></div></div>
 
       <p class="muted hint" data-i18n="game.tapWhere">Tap where this song fits in your timeline.</p>
+      <div class="timeline-rail" aria-hidden="true"><span class="timeline-rail-dot"></span></div>
       <div id="timeline" class="timeline"></div>
 
       <div class="turn-footer">
@@ -235,6 +266,11 @@
         <span data-i18n="free.orUploadQr">Or upload a photo of the QR code</span>
         <input id="qrFileInput" type="file" accept="image/*" />
       </label>
+      <!-- Collapsible debug panel — helps diagnose camera issues on Firefox Mobile -->
+      <details id="cameraDebug" class="camera-debug">
+        <summary>⚙ Camera debug</summary>
+        <pre id="cameraDebugLog" class="debug-log">Tap "Scan a card" to run diagnostics.</pre>
+      </details>
     </section>
 
     <!-- ─── FREE PLAY PLAYER ────────────────────────────────────────────── -->
@@ -263,6 +299,7 @@
   <script src="https://unpkg.com/html5-qrcode@2.3.10/html5-qrcode.min.js"></script>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qr-creator@1.0.0/dist/qr-creator.min.js"></script>
-  <script src="app.js?v=20260522c"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="app.js?v=20260522d"></script>
 </body>
 </html>
