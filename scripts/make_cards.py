@@ -6,7 +6,7 @@ Each card has:
   - FRONT: a QR code encoding `<host-url>/?id=<song-id>` (or `mt:<id>`)
   - BACK:  year + artist + title + region
 
-Cards are laid out 3×3 on A4 by default. The back sheets are mirrored
+Cards are laid out 4×5 (20 per page) on A4. The back sheets are mirrored
 horizontally so duplex printing aligns front-to-back.
 
 Usage:
@@ -45,13 +45,13 @@ ROOT = Path(__file__).resolve().parent.parent
 SONGS = ROOT / "data" / "songs.json"
 OUT_DIR = ROOT / "cards"
 
-CARDS_PER_ROW = 3
-CARDS_PER_COL = 3
+CARDS_PER_ROW = 4
+CARDS_PER_COL = 5
 PAGE_W, PAGE_H = A4
-MARGIN_X = 10 * mm
-MARGIN_Y = 10 * mm
-CARD_W = (PAGE_W - 2 * MARGIN_X) / CARDS_PER_ROW
-CARD_H = (PAGE_H - 2 * MARGIN_Y) / CARDS_PER_COL
+MARGIN_X = 8 * mm
+MARGIN_Y = 8 * mm
+CARD_W = (PAGE_W - 2 * MARGIN_X) / CARDS_PER_ROW   # ~48.5 mm
+CARD_H = (PAGE_H - 2 * MARGIN_Y) / CARDS_PER_COL   # ~56.2 mm
 
 
 def find_unicode_font() -> str | None:
@@ -109,15 +109,16 @@ def draw_front(c: canvas.Canvas, song: dict, x: float, y: float, host: str | Non
     c.rect(x, y, CARD_W, CARD_H)
 
     # QR centered, with room for the card id below.
-    qr_size = min(CARD_W, CARD_H) - 18 * mm
+    # Cards are smaller with 4×5 layout, leave ~12mm for the id label.
+    qr_size = min(CARD_W, CARD_H) - 14 * mm
     qx = x + (CARD_W - qr_size) / 2
-    qy = y + (CARD_H - qr_size) / 2 + 4 * mm
+    qy = y + (CARD_H - qr_size) / 2 + 3 * mm
     img = build_qr_image(card_payload(song, host))
     c.drawImage(img, qx, qy, width=qr_size, height=qr_size, preserveAspectRatio=True, mask="auto")
 
-    c.setFont("Helvetica", 8)
+    c.setFont("Helvetica", 7)
     c.setFillColorRGB(0.4, 0.4, 0.4)
-    c.drawCentredString(x + CARD_W / 2, y + 5 * mm, song["id"])
+    c.drawCentredString(x + CARD_W / 2, y + 3.5 * mm, song["id"])
 
 
 def wrap_text(text: str, max_chars: int) -> list[str]:
@@ -151,25 +152,25 @@ def draw_back(c: canvas.Canvas, song: dict, x: float, y: float, body_font: str) 
     c.rect(x, y, CARD_W, CARD_H)
 
     cx = x + CARD_W / 2
-    # Year — big and bold.
-    c.setFillColorRGB(0.95, 0.33, 0.44)
-    c.setFont("Helvetica-Bold", 36)
-    c.drawCentredString(cx, y + CARD_H - 22 * mm, str(song["year"]))
+    # Year — big and bold. 28pt fits the smaller 4×5 cards well.
+    c.setFillColorRGB(0.96, 0.78, 0.26)   # gold (#f5c842)
+    c.setFont("Helvetica-Bold", 28)
+    c.drawCentredString(cx, y + CARD_H - 16 * mm, str(song["year"]))
 
     # Artist + title. Use the unicode font if we found one.
     c.setFillColorRGB(0, 0, 0)
-    c.setFont(body_font, 11)
-    for i, line in enumerate(wrap_text(song["artist"], 28)):
-        c.drawCentredString(cx, y + CARD_H - 32 * mm - i * 5 * mm, line)
-
     c.setFont(body_font, 9)
-    title_y_start = y + CARD_H - 50 * mm
-    for i, line in enumerate(wrap_text(song["title"], 32)):
-        c.drawCentredString(cx, title_y_start - i * 4.2 * mm, line)
+    for i, line in enumerate(wrap_text(song["artist"], 26)):
+        c.drawCentredString(cx, y + CARD_H - 24 * mm - i * 4.5 * mm, line)
 
-    c.setFont("Helvetica", 7)
+    c.setFont(body_font, 7.5)
+    title_y_start = y + CARD_H - 38 * mm
+    for i, line in enumerate(wrap_text(song["title"], 30)):
+        c.drawCentredString(cx, title_y_start - i * 3.8 * mm, line)
+
+    c.setFont("Helvetica", 6.5)
     c.setFillColorRGB(0.5, 0.5, 0.5)
-    c.drawCentredString(cx, y + 4 * mm, REGION_LABEL.get(song["region"], song["region"]).upper())
+    c.drawCentredString(cx, y + 3.5 * mm, REGION_LABEL.get(song["region"], song["region"]).upper())
 
 
 def main() -> int:

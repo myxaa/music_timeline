@@ -207,6 +207,7 @@ function makeSlotEl(index, label) {
 function makeCardEl(card) {
   const el = document.createElement("div");
   el.className = "tlcard";
+  if (card.region) el.dataset.region = card.region;
   el.innerHTML = `
     <div class="y">${card.year}</div>
     <div class="meta">
@@ -259,6 +260,7 @@ function revealAndScore() {
       year: y,
       artist: game.currentSong.artist,
       title: game.currentSong.title,
+      region: game.currentSong.region,
     });
     // keep sorted (in case of ties the splice spot was equal — order doesn't matter)
     tl.sort((a, b) => a.year - b.year);
@@ -892,6 +894,7 @@ function mpRevealAndScore() {
       year: y,
       artist: mpGame.currentSong.artist,
       title: mpGame.currentSong.title,
+      region: mpGame.currentSong.region,
     });
     tl.sort((a, b) => a.year - b.year);
   }
@@ -1343,6 +1346,7 @@ function mpMakeSlotEl(index, label, clickable) {
 function mpMakeCardEl(card) {
   const el = document.createElement("div");
   el.className = "tlcard";
+  if (card.region) el.dataset.region = card.region;
   el.innerHTML = `
     <div class="y">${card.year}</div>
     <div class="meta">
@@ -1577,6 +1581,136 @@ function pickRandomVerified() {
   return verifiedSongs[Math.floor(Math.random() * verifiedSongs.length)];
 }
 
+// ─── In-browser PDF card printing ───────────────────────────────────────────
+//
+// Generates a "cheat sheet" PDF with the BACK side of each card (year, artist,
+// title, region pill). Layout: 4 columns × 5 rows = 20 cards per A4 page.
+// Card size ~47×57mm. Uses jsPDF loaded from CDN.
+
+function countPrintable(regions) {
+  return verifiedSongs.filter((s) => regions.includes(s.region)).length;
+}
+
+function updatePrintBadges() {
+  const allCount = verifiedSongs.length;
+  const worldCount = countPrintable(["world"]);
+  const russiaCount = countPrintable(["russia", "ussr"]);
+  const israelCount = countPrintable(["israel"]);
+
+  function badge(btn, n) {
+    if (!btn) return;
+    // Strip any existing badge then re-add
+    const existing = btn.querySelector(".print-badge");
+    if (existing) existing.remove();
+    const span = document.createElement("span");
+    span.className = "print-badge";
+    span.textContent = n;
+    btn.appendChild(span);
+  }
+  badge($("#printAllBtn"), allCount);
+  badge($("#printWorldBtn"), worldCount);
+  badge($("#printRussiaBtn"), russiaCount);
+  badge($("#printIsraelBtn"), israelCount);
+}
+
+const REGION_COLORS = {
+  world:  [96, 165, 250],   // blue
+  ussr:   [248, 113, 113],  // red
+  russia: [251, 146, 60],   // orange
+  israel: [45, 212, 191],   // teal
+};
+const REGION_NAMES = {
+  world: "WORLD", ussr: "USSR", russia: "RUSSIA", israel: "ISRAEL",
+};
+
+function printCards(regions) {
+  if (typeof window.jspdf === "undefined" && typeof window.jsPDF === "undefined") {
+    alert("jsPDF not loaded yet. Please wait a moment and try again.");
+    return;
+  }
+  const jsPDF = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+  if (!jsPDF) { alert("PDF library unavailable."); return; }
+
+  const subset = verifiedSongs.filter((s) => regions.includes(s.region));
+  if (subset.length === 0) {
+    alert("No verified songs in the selected region(s).");
+    return;
+  }
+
+  // A4 dimensions in mm
+  const PAGE_W = 210, PAGE_H = 297;
+  const COLS = 4, ROWS = 5;
+  const MARGIN_X = 8, MARGIN_Y = 8;
+  const CARD_W = (PAGE_W - 2 * MARGIN_X) / COLS;   // ~48.5mm
+  const CARD_H = (PAGE_H - 2 * MARGIN_Y) / ROWS;   // ~56.2mm
+
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+
+  // Text wrapping helper
+  function wrapText(doc, text, maxWidth, fontSize) {
+    doc.setFontSize(fontSize);
+    return doc.splitTextToSize(String(text), maxWidth);
+  }
+
+  const perPage = COLS * ROWS;
+  let firstPage = true;
+
+  for (let pageStart = 0; pageStart < subset.length; pageStart += perPage) {
+    if (!firstPage) doc.addPage();
+    firstPage = false;
+    const batch = subset.slice(pageStart, pageStart + perPage);
+
+    batch.forEach((song, i) => {
+      const col = i % COLS;
+      const row = Math.floor(i / COLS);
+      const x = MARGIN_X + col * CARD_W;
+      const y = MARGIN_Y + row * CARD_H;
+
+      // Card border
+      doc.setDrawColor(60, 60, 70);
+      doc.setLineWidth(0.3);
+      doc.rect(x, y, CARD_W, CARD_H);
+
+      // Left accent bar (region color)
+      const col3 = REGION_COLORS[song.region] || [100, 100, 100];
+      doc.setFillColor(...col3);
+      doc.rect(x, y, 2, CARD_H, "F");
+
+      // Year (big, gold-ish)
+      doc.setTextColor(245, 200, 66);
+      doc.setFontSize(22);
+      doc.setFont("helvetica", "bold");
+      doc.text(String(song.year), x + CARD_W / 2, y + 14, { align: "center" });
+
+      // Artist
+      doc.setTextColor(241, 241, 245);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      const artistLines = wrapText(doc, song.artist, CARD_W - 8, 8);
+      doc.text(artistLines, x + CARD_W / 2, y + 22, { align: "center" });
+
+      // Title
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.setTextColor(140, 140, 154);
+      const titleStart = y + 22 + artistLines.length * 4;
+      const titleLines = wrapText(doc, song.title, CARD_W - 8, 7);
+      doc.text(titleLines, x + CARD_W / 2, titleStart, { align: "center" });
+
+      // Region pill at bottom
+      const regionName = REGION_NAMES[song.region] || (song.region || "").toUpperCase();
+      doc.setFontSize(6);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(...col3);
+      doc.text(regionName, x + CARD_W / 2, y + CARD_H - 4, { align: "center" });
+    });
+  }
+
+  const regionTag = regions.length === 4 ? "all"
+    : regions.join("-").replace(/russia-ussr|ussr-russia/, "ru-ussr");
+  doc.save(`music-cards-${regionTag}-${subset.length}.pdf`);
+}
+
 // ─── Wire-up ────────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", async () => {
   // Translate every [data-i18n] element in the static HTML before anything
@@ -1590,6 +1724,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   catch (e) { $("#dbStatus").textContent = t("home.dbError", { msg: e.message }); }
 
   refreshResumeButton();
+  updatePrintBadges();
 
   $("#gameBtn").addEventListener("click", openSetup);
   $("#resumeBtn").addEventListener("click", resumeGame);
@@ -1669,6 +1804,22 @@ document.addEventListener("DOMContentLoaded", async () => {
     else         freeYtPlayer.playVideo();
   });
   $("#freeRevealBtn").addEventListener("click", freeReveal);
+
+  // Print card buttons
+  $("#printAllBtn").addEventListener("click", () => printCards(["world", "ussr", "russia", "israel"]));
+  $("#printWorldBtn").addEventListener("click", () => printCards(["world"]));
+  $("#printRussiaBtn").addEventListener("click", () => printCards(["russia", "ussr"]));
+  $("#printIsraelBtn").addEventListener("click", () => printCards(["israel"]));
+  $("#printCustomBtn").addEventListener("click", () => {
+    const regions = ["world", "ussr", "russia", "israel"].filter(
+      (r) => {
+        const el = document.getElementById("pc" + r.charAt(0).toUpperCase() + r.slice(1));
+        return el && el.checked;
+      }
+    );
+    if (regions.length === 0) { alert(t("setup.pickRegion")); return; }
+    printCards(regions);
+  });
 
   $$("[data-screen]").forEach((el) => {
     el.addEventListener("click", () => showScreen(el.dataset.screen));
