@@ -7,88 +7,90 @@
   <link rel="manifest" href="manifest.json" />
   <title>Music Timeline</title>
   <link rel="stylesheet" href="style.css" />
+  <!-- i18n runs before app.js so <html lang/dir> are set and t() exists. -->
+  <script src="i18n.js"></script>
 </head>
 <body>
   <main id="app">
     <!-- ─── HOME ────────────────────────────────────────────────────────── -->
     <section id="home" class="screen active">
-      <h1>Music Timeline</h1>
-      <p class="muted">Phone-only Hitster: pass and play, no printed cards needed.</p>
-      <button id="gameBtn" class="primary">Start a game</button>
-      <button id="resumeBtn" class="ghost hidden">Resume saved game</button>
-      <button id="resumeHostBtn" class="ghost hidden">Resume hosted game</button>
-      <button id="resumePlayerBtn" class="ghost hidden">Reconnect to game</button>
-      <button id="hostBtn" class="ghost">Host multiplayer game</button>
-      <button id="joinBtn" class="ghost">Join multiplayer game</button>
-      <div class="divider"><span>or free play</span></div>
-      <button id="scanBtn" class="ghost">Scan a card</button>
-      <button id="randomBtn" class="ghost">Play a random song</button>
-      <p class="tiny muted" id="dbStatus">Loading songs…</p>
+      <h1 data-i18n="home.title">Music Timeline</h1>
+      <p class="muted" data-i18n="home.subtitle">Phone-only Hitster: pass and play, no printed cards needed.</p>
+      <button id="gameBtn" class="primary" data-i18n="home.start">Start a game</button>
+      <button id="resumeBtn" class="ghost hidden" data-i18n="home.resume">Resume saved game</button>
+      <button id="resumeHostBtn" class="ghost hidden" data-i18n="home.resumeHost">Resume hosted game</button>
+      <button id="resumePlayerBtn" class="ghost hidden" data-i18n="home.reconnect">Reconnect to game</button>
+      <button id="hostBtn" class="ghost" data-i18n="home.host">Host multiplayer game</button>
+      <button id="joinBtn" class="ghost" data-i18n="home.join">Join multiplayer game</button>
+      <div class="divider"><span data-i18n="home.orFreePlay">or free play</span></div>
+      <button id="scanBtn" class="ghost" data-i18n="home.scan">Scan a card</button>
+      <button id="randomBtn" class="ghost" data-i18n="home.random">Play a random song</button>
+      <p class="tiny muted" id="dbStatus" data-i18n="home.loading">Loading songs…</p>
     </section>
 
     <!-- ─── MULTIPLAYER: JOIN ───────────────────────────────────────────── -->
     <section id="mpJoin" class="screen">
-      <button class="close" data-screen="home" aria-label="Close">✕</button>
-      <h2>Join game</h2>
+      <button class="close" data-screen="home" data-i18n-aria-label="game.home" aria-label="Close">✕</button>
+      <h2 data-i18n="mp.join.title">Join game</h2>
       <label class="field">
-        <span>Game code</span>
+        <span data-i18n="mp.join.code">Game code</span>
         <input id="mpCodeInput" class="bigcode" type="text" maxlength="4" autocapitalize="characters" autocomplete="off" placeholder="ABCD" />
       </label>
       <label class="field">
-        <span>Your name</span>
-        <input id="mpNameInput" type="text" maxlength="20" placeholder="Your name" />
+        <span data-i18n="mp.join.name">Your name</span>
+        <input id="mpNameInput" type="text" maxlength="20" data-i18n-placeholder="mp.join.name" placeholder="Your name" />
       </label>
-      <button id="mpJoinBtn" class="primary">Join</button>
+      <button id="mpJoinBtn" class="primary" data-i18n="mp.join.action">Join</button>
       <p id="mpJoinStatus" class="muted small"></p>
     </section>
 
     <!-- ─── MULTIPLAYER: HOST LOBBY ─────────────────────────────────────── -->
     <section id="mpHostLobby" class="screen">
-      <button class="close" data-screen="home" aria-label="Close" id="mpHostQuitBtn">✕</button>
-      <p class="muted">Share with players at your table.</p>
+      <button class="close" data-screen="home" data-i18n-aria-label="game.home" aria-label="Close" id="mpHostQuitBtn">✕</button>
+      <p class="muted" data-i18n="mp.host.share">Share with players at your table.</p>
       <div class="bigcode-display" id="mpHostCode">…</div>
 
       <div class="share-row">
         <canvas id="mpQrCanvas" width="200" height="200" class="qrcanvas hidden"></canvas>
         <div class="share-actions">
           <input id="mpShareLink" class="share-link" readonly />
-          <button id="mpCopyLinkBtn" class="ghost small">Copy link</button>
-          <button id="mpShareBtn" class="ghost small hidden">Share…</button>
+          <button id="mpCopyLinkBtn" class="ghost small" data-i18n="mp.host.copyLink">Copy link</button>
+          <button id="mpShareBtn" class="ghost small hidden" data-i18n="mp.host.shareBtn">Share…</button>
         </div>
       </div>
 
-      <p class="small muted">Or they can open the app, tap "Join multiplayer game", and enter the code manually.</p>
+      <p class="small muted" data-i18n="mp.host.manualHint">Or they can open the app, tap "Join multiplayer game", and enter the code manually.</p>
 
       <div class="field">
-        <span>Players</span>
+        <span data-i18n="setup.players">Players</span>
         <div class="players-list" id="mpHostPlayers"></div>
       </div>
 
       <div class="field">
-        <span>First to <strong id="mpTargetScoreVal">10</strong> cards</span>
+        <span id="mpTargetScoreLabel">First to <strong id="mpTargetScoreVal">10</strong> cards</span>
         <input id="mpTargetScore" type="range" min="3" max="20" value="10" />
       </div>
 
       <div class="field">
-        <span>Songs from</span>
+        <span data-i18n="setup.songsFrom">Songs from</span>
         <div class="region-grid" id="mpRegionGrid">
-          <label><input type="checkbox" value="world"  checked /> World</label>
-          <label><input type="checkbox" value="ussr"   checked /> USSR</label>
-          <label><input type="checkbox" value="russia" checked /> Russia</label>
-          <label><input type="checkbox" value="israel" checked /> Israel</label>
+          <label><input type="checkbox" value="world"  checked /> <span data-i18n="region.world">World</span></label>
+          <label><input type="checkbox" value="ussr"   checked /> <span data-i18n="region.ussr">USSR</span></label>
+          <label><input type="checkbox" value="russia" checked /> <span data-i18n="region.russia">Russia</span></label>
+          <label><input type="checkbox" value="israel" checked /> <span data-i18n="region.israel">Israel</span></label>
         </div>
       </div>
 
-      <button id="mpStartBtn" class="primary" disabled>Start game</button>
+      <button id="mpStartBtn" class="primary" disabled data-i18n="setup.start">Start game</button>
     </section>
 
     <!-- ─── MULTIPLAYER: PLAYER LOBBY ───────────────────────────────────── -->
     <section id="mpPlayerLobby" class="screen">
-      <button class="close" data-screen="home" aria-label="Close" id="mpPlayerQuitBtn">✕</button>
-      <h2 id="mpYouAre">Connected</h2>
-      <p class="muted">Waiting for the host to start the game…</p>
+      <button class="close" data-screen="home" data-i18n-aria-label="game.home" aria-label="Close" id="mpPlayerQuitBtn">✕</button>
+      <h2 id="mpYouAre" data-i18n="mp.lobby.connected">Connected</h2>
+      <p class="muted" data-i18n="mp.lobby.waitingStart">Waiting for the host to start the game…</p>
       <div class="field">
-        <span>Players in lobby</span>
+        <span data-i18n="mp.lobby.players">Players in lobby</span>
         <div class="players-list" id="mpClientPlayers"></div>
       </div>
     </section>
@@ -96,25 +98,25 @@
     <!-- ─── MULTIPLAYER: TURN ───────────────────────────────────────────── -->
     <section id="mpTurn" class="screen turnscreen">
       <header class="turnheader">
-        <button class="close small" id="mpQuitTurnBtn" aria-label="Quit">✕</button>
+        <button class="close small" id="mpQuitTurnBtn" data-i18n-aria-label="game.home" aria-label="Quit">✕</button>
         <div class="turnplayer">
           <div class="turnplayer-name" id="mpTurnPlayerName">Player 1</div>
           <div class="turnplayer-score muted"><span id="mpTurnPlayerScore">0</span> / <span id="mpTurnPlayerTarget">10</span></div>
         </div>
         <div class="turn-actions">
-          <button id="mpPlayPauseBtn" class="iconbtn hidden" aria-label="Pause">⏸</button>
+          <button id="mpPlayPauseBtn" class="iconbtn hidden" data-i18n-aria-label="common.pause" aria-label="Pause">⏸</button>
         </div>
       </header>
 
       <!-- Audio only renders on the host (DJ) phone -->
       <div id="mpYtwrap" aria-hidden="true"><div id="mpYt"></div></div>
 
-      <p class="muted hint" id="mpTurnHint">Tap where this song fits in your timeline.</p>
+      <p class="muted hint" id="mpTurnHint" data-i18n="game.tapWhere">Tap where this song fits in your timeline.</p>
       <div id="mpTimeline" class="timeline"></div>
 
       <div class="turn-footer">
         <p id="mpPlacementHint" class="muted small"></p>
-        <button id="mpLockInBtn" class="warn hidden" disabled>Reveal &amp; lock in</button>
+        <button id="mpLockInBtn" class="warn hidden" disabled data-i18n="game.lockIn">Reveal &amp; lock in</button>
       </div>
     </section>
 
@@ -127,69 +129,69 @@
         <div class="reveal-title"  id="mpRevealTitle"></div>
         <div class="reveal-region muted" id="mpRevealRegion"></div>
       </div>
-      <button id="mpContinueBtn" class="primary hidden">Pass to next player</button>
-      <p id="mpContinueWait" class="muted small">Waiting for host to continue…</p>
+      <button id="mpContinueBtn" class="primary hidden" data-i18n="game.passNext">Pass to next player</button>
+      <p id="mpContinueWait" class="muted small" data-i18n="game.waitHost">Waiting for host to continue…</p>
     </section>
 
     <!-- ─── MULTIPLAYER: GAME OVER ──────────────────────────────────────── -->
     <section id="mpOver" class="screen">
       <h1 id="mpWinnerName"></h1>
-      <p class="muted">wins!</p>
+      <p class="muted" data-i18n="game.winsLabel">wins!</p>
       <div id="mpFinalScores" class="scores"></div>
-      <button data-screen="home" class="ghost">Home</button>
+      <button data-screen="home" class="ghost" data-i18n="game.home">Home</button>
     </section>
 
     <!-- ─── GAME SETUP ──────────────────────────────────────────────────── -->
     <section id="gameSetup" class="screen">
-      <button class="close" data-screen="home" aria-label="Close">✕</button>
-      <h2>New game</h2>
+      <button class="close" data-screen="home" data-i18n-aria-label="game.home" aria-label="Close">✕</button>
+      <h2 data-i18n="setup.newGame">New game</h2>
 
       <label class="field">
-        <span>Players</span>
+        <span data-i18n="setup.players">Players</span>
         <div class="players-list" id="playersList"></div>
-        <button id="addPlayerBtn" class="ghost small">+ Add player</button>
+        <button id="addPlayerBtn" class="ghost small" data-i18n="setup.addPlayer">+ Add player</button>
       </label>
 
       <label class="field">
-        <span>First to <strong id="targetScoreVal">10</strong> cards</span>
+        <span id="targetScoreLabel">First to <strong id="targetScoreVal">10</strong> cards</span>
         <input id="targetScore" type="range" min="3" max="20" value="10" />
       </label>
 
       <label class="field">
-        <span>Songs from</span>
+        <span data-i18n="setup.songsFrom">Songs from</span>
         <div class="region-grid" id="regionGrid">
-          <label><input type="checkbox" value="world"  checked /> World</label>
-          <label><input type="checkbox" value="ussr"   checked /> USSR</label>
-          <label><input type="checkbox" value="russia" checked /> Russia</label>
-          <label><input type="checkbox" value="israel" checked /> Israel</label>
+          <label><input type="checkbox" value="world"  checked /> <span data-i18n="region.world">World</span></label>
+          <label><input type="checkbox" value="ussr"   checked /> <span data-i18n="region.ussr">USSR</span></label>
+          <label><input type="checkbox" value="russia" checked /> <span data-i18n="region.russia">Russia</span></label>
+          <label><input type="checkbox" value="israel" checked /> <span data-i18n="region.israel">Israel</span></label>
         </div>
       </label>
 
-      <button id="startGameBtn" class="primary">Start game</button>
+      <button id="startGameBtn" class="primary" data-i18n="setup.start">Start game</button>
     </section>
 
     <!-- ─── GAME: TURN ──────────────────────────────────────────────────── -->
     <section id="gameTurn" class="screen turnscreen">
       <header class="turnheader">
-        <button class="close small" id="quitGameBtn" aria-label="Quit">✕</button>
+        <button class="close small" id="quitGameBtn" data-i18n-aria-label="game.home" aria-label="Quit">✕</button>
         <div class="turnplayer">
           <div class="turnplayer-name" id="turnPlayerName">Player 1</div>
           <div class="turnplayer-score muted"><span id="turnPlayerScore">0</span> / <span id="turnPlayerTarget">10</span></div>
         </div>
         <div class="turn-actions">
-          <button id="playPauseBtn" class="iconbtn" aria-label="Pause">⏸</button>
+          <button id="playPauseBtn" class="iconbtn" data-i18n-aria-label="common.pause" aria-label="Pause">⏸</button>
         </div>
       </header>
 
       <!-- Hidden YouTube iframe — produces audio while off-screen. -->
       <div id="ytwrap" aria-hidden="true"><div id="yt"></div></div>
 
-      <p class="muted hint">Tap where this song fits in your timeline.</p>
+      <p class="muted hint" data-i18n="game.tapWhere">Tap where this song fits in your timeline.</p>
       <div id="timeline" class="timeline"></div>
 
       <div class="turn-footer">
-        <p id="placementHint" class="muted small">No card selected yet.</p>
-        <button id="lockInBtn" class="warn" disabled>Reveal &amp; lock in</button>
+        <p id="placementHint" class="muted small" data-i18n="game.noSelection">No card selected yet.</p>
+        <button id="lockInBtn" class="warn" disabled data-i18n="game.lockIn">Reveal &amp; lock in</button>
       </div>
     </section>
 
@@ -202,44 +204,44 @@
         <div class="reveal-title"  id="revealTitle"></div>
         <div class="reveal-region muted" id="revealRegion"></div>
       </div>
-      <button id="continueBtn" class="primary">Pass to next player</button>
+      <button id="continueBtn" class="primary" data-i18n="game.passNext">Pass to next player</button>
     </section>
 
     <!-- ─── GAME OVER ───────────────────────────────────────────────────── -->
     <section id="gameOver" class="screen">
       <h1 id="winnerName"></h1>
-      <p class="muted">wins!</p>
+      <p class="muted" data-i18n="game.winsLabel">wins!</p>
       <div id="finalScores" class="scores"></div>
-      <button id="playAgainBtn" class="primary">Play again</button>
-      <button data-screen="home" class="ghost">Home</button>
+      <button id="playAgainBtn" class="primary" data-i18n="game.playAgain">Play again</button>
+      <button data-screen="home" class="ghost" data-i18n="game.home">Home</button>
     </section>
 
     <!-- ─── FREE PLAY SCANNER ───────────────────────────────────────────── -->
     <section id="scanner" class="screen">
-      <button class="close" data-screen="home" aria-label="Close">✕</button>
+      <button class="close" data-screen="home" data-i18n-aria-label="game.home" aria-label="Close">✕</button>
       <div id="reader"></div>
-      <p class="muted">Point the camera at the QR code on the back of a card.</p>
+      <p class="muted" data-i18n="free.scanHint">Point the camera at the QR code on the back of a card.</p>
     </section>
 
     <!-- ─── FREE PLAY PLAYER ────────────────────────────────────────────── -->
     <section id="freePlayer" class="screen">
-      <button class="close" data-screen="home" aria-label="Close">✕</button>
+      <button class="close" data-screen="home" data-i18n-aria-label="game.home" aria-label="Close">✕</button>
       <div id="freeYtWrap" aria-hidden="true"><div id="freeYt"></div></div>
       <div class="cover">
         <div class="vinyl" id="freeVinyl" aria-hidden="true"></div>
-        <p class="cover-text">Now playing…</p>
-        <p class="cover-sub muted">Reveal when you're ready.</p>
+        <p class="cover-text" data-i18n="free.nowPlaying">Now playing…</p>
+        <p class="cover-sub muted" data-i18n="free.revealHint">Reveal when you're ready.</p>
       </div>
       <div class="controls">
-        <button id="freePlayPauseBtn" class="primary">⏸ Pause</button>
-        <button id="freeRevealBtn" class="warn">Reveal answer</button>
+        <button id="freePlayPauseBtn" class="primary" data-i18n="common.pause">⏸ Pause</button>
+        <button id="freeRevealBtn" class="warn" data-i18n="game.reveal">Reveal answer</button>
       </div>
       <div id="freeAnswer" class="answer hidden">
         <div class="year"   id="freeAnsYear"></div>
         <div class="artist" id="freeAnsArtist"></div>
         <div class="title"  id="freeAnsTitle"></div>
         <div class="region muted" id="freeAnsRegion"></div>
-        <button data-screen="home" class="ghost">Done</button>
+        <button data-screen="home" class="ghost" data-i18n="game.done">Done</button>
       </div>
     </section>
   </main>

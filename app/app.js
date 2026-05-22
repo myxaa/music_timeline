@@ -13,12 +13,10 @@
  * title and thumbnail never leak before the player reveals.
  */
 
-const REGION_LABEL = {
-  world:  "World",
-  ussr:   "USSR",
-  russia: "Russia",
-  israel: "Israel",
-};
+// Resolved at call-time so it follows the current language.
+function regionLabel(code) {
+  return (typeof t === "function") ? t("region." + code) : code;
+}
 
 const STORAGE_KEY = "mt.game.v1";
 
@@ -54,7 +52,7 @@ async function loadSongs() {
   songs = await res.json();
   songsById = new Map(songs.map((s) => [s.id, s]));
   verifiedSongs = songs.filter((s) => s.youtube_id);
-  $("#dbStatus").textContent = `${songs.length} songs (${verifiedSongs.length} verified)`;
+  $("#dbStatus").textContent = t("home.dbStatus", { n: songs.length, v: verifiedSongs.length });
 }
 
 // ─── YouTube IFrame loader (shared) ─────────────────────────────────────────
@@ -178,17 +176,17 @@ function renderTurn() {
 
   if (cards.length === 0) {
     // Empty timeline → single "anywhere" slot, always correct.
-    tl.appendChild(makeSlotEl(0, "Place anywhere (first card is always correct)"));
+    tl.appendChild(makeSlotEl(0, t("game.slot.empty")));
     return;
   }
 
   // Slot before first
-  tl.appendChild(makeSlotEl(0, `Before ${cards[0].year}`));
+  tl.appendChild(makeSlotEl(0, t("game.slot.before", { year: cards[0].year })));
   for (let i = 0; i < cards.length; i++) {
     tl.appendChild(makeCardEl(cards[i]));
     const label = i < cards.length - 1
-      ? `Between ${cards[i].year} and ${cards[i + 1].year}`
-      : `After ${cards[i].year}`;
+      ? t("game.slot.between", { y1: cards[i].year, y2: cards[i + 1].year })
+      : t("game.slot.after", { year: cards[i].year });
     tl.appendChild(makeSlotEl(i + 1, label));
   }
 }
@@ -224,13 +222,13 @@ function escapeHtml(s) {
 }
 
 function describePlacement() {
-  if (game.selectedSlot === null) return "Pick a slot, then reveal.";
+  if (game.selectedSlot === null) return t("game.pickSlot");
   const cards = game.players[game.turnIdx].timeline;
-  if (cards.length === 0) return "Anywhere works for the first card.";
+  if (cards.length === 0) return t("game.anywhereFirst");
   const i = game.selectedSlot;
-  if (i === 0) return `You think it's before ${cards[0].year}.`;
-  if (i === cards.length) return `You think it's after ${cards[cards.length - 1].year}.`;
-  return `You think it's between ${cards[i - 1].year} and ${cards[i].year}.`;
+  if (i === 0) return t("game.thinkBefore", { year: cards[0].year });
+  if (i === cards.length) return t("game.thinkAfter", { year: cards[cards.length - 1].year });
+  return t("game.thinkBetween", { y1: cards[i - 1].year, y2: cards[i].year });
 }
 
 function revealAndScore() {
@@ -274,9 +272,9 @@ function revealAndScore() {
   $("#revealYear").textContent = y;
   $("#revealArtist").textContent = game.currentSong.artist;
   $("#revealTitle").textContent  = game.currentSong.title;
-  $("#revealRegion").textContent = REGION_LABEL[game.currentSong.region] || game.currentSong.region;
+  $("#revealRegion").textContent = regionLabel(game.currentSong.region);
   const rr = $("#revealResult");
-  rr.textContent = correct ? `✓ ${me.name} keeps the card` : `✗ ${me.name} misses`;
+  rr.textContent = correct ? t("game.keepsCard", { name: me.name }) : t("game.misses", { name: me.name });
   rr.classList.toggle("good", correct);
   rr.classList.toggle("bad", !correct);
 
@@ -308,7 +306,7 @@ function finishGame() {
   game.phase = "over";
   if (!game.winner) {
     // Triggered by pool exhaustion — pick highest score (ties → first wins).
-    let best = -1, name = "Nobody";
+    let best = -1, name = t("game.nobody");
     for (const p of game.players) {
       if (p.timeline.length > best) { best = p.timeline.length; name = p.name; }
     }
@@ -329,7 +327,7 @@ function finishGame() {
 }
 
 function quitGame() {
-  if (!confirm("Quit this game? Progress will be lost.")) return;
+  if (!confirm(t("game.quitConfirm"))) return;
   clearSavedGame();
   game = null;
   if (ytPlayer && ytPlayer.stopVideo) try { ytPlayer.stopVideo(); } catch {}
@@ -361,16 +359,23 @@ function renderPlayersList() {
 }
 
 const setupState = {
-  players: ["Player 1", "Player 2"],
+  players: [],
 };
 
 function openSetup() {
-  setupState.players = ["Player 1", "Player 2"];
+  setupState.players = [t("game.playerDefault", { n: 1 }), t("game.playerDefault", { n: 2 })];
   renderPlayersList();
   $("#targetScore").value = 10;
-  $("#targetScoreVal").textContent = 10;
+  updateTargetScoreLabel("targetScoreLabel", 10);
   $$("#regionGrid input").forEach((cb) => { cb.checked = true; });
   showScreen("gameSetup");
+}
+
+function updateTargetScoreLabel(elId, value) {
+  // Render plain text — losing bold styling on the number, but works in every
+  // script and is safe across translations whose grammar changes word order.
+  const el = document.getElementById(elId);
+  if (el) el.textContent = t("setup.targetScore", { n: value });
 }
 
 function readRegionsFromUI() {
@@ -380,17 +385,17 @@ function readRegionsFromUI() {
 async function onStartGameTap() {
   const playerNames = setupState.players.map((n) => n.trim()).filter(Boolean);
   if (playerNames.length < 2) {
-    alert("Need at least 2 players.");
+    alert(t("setup.needTwo"));
     return;
   }
   const regions = readRegionsFromUI();
   if (regions.length === 0) {
-    alert("Pick at least one region.");
+    alert(t("setup.pickRegion"));
     return;
   }
   const targetScore = parseInt($("#targetScore").value, 10);
   if (verifiedSongs.filter((s) => regions.includes(s.region)).length < targetScore * playerNames.length) {
-    if (!confirm("There aren't many verified songs in this region mix. The game may run out before anyone wins. Continue?")) return;
+    if (!confirm(t("setup.lowSongs"))) return;
   }
   showScreen("gameTurn");
   await startGame({ playerNames, targetScore, regions });
@@ -588,8 +593,8 @@ async function shareJoinUrl() {
   if (!url) return;
   try {
     await navigator.share({
-      title: "Music Timeline",
-      text: `Join my music game (code ${mpGame.code})`,
+      title: t("home.title"),
+      text: t("mp.host.share.text", { code: mpGame.code }),
       url,
     });
   } catch (e) {
@@ -604,7 +609,7 @@ async function copyJoinUrl() {
     await navigator.clipboard.writeText(url);
     const btn = $("#mpCopyLinkBtn");
     const orig = btn.textContent;
-    btn.textContent = "Copied ✓";
+    btn.textContent = t("mp.host.copied");
     setTimeout(() => { btn.textContent = orig; }, 1200);
   } catch {
     // clipboard API blocked (e.g., HTTP origin) — select-all so user can copy
@@ -677,7 +682,7 @@ async function startHosting(resumeSnap = null) {
       renderMpScreen();
       mpBroadcast(); // anyone who reconnects will get fresh state
     } else {
-      const hostName = prompt("Your name (host):", "Host") || "Host";
+      const hostName = prompt(t("mp.host.namePrompt"), t("mp.host.defaultName")) || t("mp.host.defaultName");
       mpGame.players.push({
         peerId: id,
         name: hostName,
@@ -693,14 +698,14 @@ async function startHosting(resumeSnap = null) {
   peer.on("error", (err) => {
     if (err.type === "unavailable-id") {
       // ~1/500k odds even after collision-prone chars excluded, but handle it.
-      alert(`Code ${code} is taken — picking a new one.`);
+      alert(t("mp.host.codeTaken", { code }));
       peer.destroy();
       mpGame = null;
       startHosting();
       return;
     }
     console.warn("PeerJS host error:", err);
-    alert("Connection error: " + (err.type || err.message || err));
+    alert(t("mp.host.connectionError", { msg: err.type || err.message || err }));
   });
 
   peer.on("connection", (conn) => {
@@ -797,13 +802,13 @@ function mpPublicState(g) {
 
 async function mpStartGame() {
   if (mpGame.players.length < 2) {
-    alert("Need at least 2 players to start.");
+    alert(t("setup.needTwo"));
     return;
   }
   mpGame.targetScore = parseInt($("#mpTargetScore").value, 10);
   mpGame.regions = $$("#mpRegionGrid input:checked").map((cb) => cb.value);
   if (mpGame.regions.length === 0) {
-    alert("Pick at least one region.");
+    alert(t("setup.pickRegion"));
     return;
   }
   await mpEnsureHostPlayer();
@@ -903,7 +908,7 @@ function mpContinue() {
 function mpFinishGame() {
   if (!mpGame.winner) {
     // Pool exhausted — top score wins.
-    let best = -1, name = "Nobody";
+    let best = -1, name = t("game.nobody");
     for (const p of mpGame.players) {
       if (p.timeline.length > best) { best = p.timeline.length; name = p.name; }
     }
@@ -918,7 +923,7 @@ function mpFinishGame() {
 }
 
 function mpHostQuit() {
-  if (!confirm("End the multiplayer game?")) return;
+  if (!confirm(t("mp.host.endConfirm"))) return;
   clearMpSaved("host");
   if (mpReconnectTimer) { clearInterval(mpReconnectTimer); mpReconnectTimer = null; }
   if (mpElectionTimer) { clearInterval(mpElectionTimer); mpElectionTimer = null; }
@@ -935,10 +940,10 @@ async function joinAsPlayer(opts = {}) {
   const name = (opts.name || $("#mpNameInput").value).trim() || "Player";
   const isResume = !!opts.isResume;
   if (!/^[A-Z]{4}$/.test(codeInput)) {
-    $("#mpJoinStatus").textContent = "Code should be 4 letters.";
+    $("#mpJoinStatus").textContent = t("mp.join.invalidCode");
     return;
   }
-  $("#mpJoinStatus").textContent = "Connecting…";
+  $("#mpJoinStatus").textContent = t("mp.join.connecting");
   const targetId = MP_PREFIX + codeInput;
   const myId = getStablePeerId();
   const peer = new Peer(myId, { debug: 1 });
@@ -953,9 +958,9 @@ async function joinAsPlayer(opts = {}) {
       return;
     }
     if (!isResume) {
-      $("#mpJoinStatus").textContent = "Error: " + (err.type || err.message);
+      $("#mpJoinStatus").textContent = t("mp.join.error", { msg: err.type || err.message });
       if (err.type === "peer-unavailable") {
-        $("#mpJoinStatus").textContent = "No game with that code is running.";
+        $("#mpJoinStatus").textContent = t("mp.join.notFound");
       }
     }
     // For resume: silently retry via the reconnect timer.
@@ -978,10 +983,10 @@ function attachPlayerHandlers(peer, code, hostPeerId, name, isResume = false) {
           role: "player", peer, hostConn: null,
           myPeerId: myId, hostPeerId, code, myName: name,
         });
-        $("#mpJoinStatus").textContent = "Waiting for host…";
+        $("#mpJoinStatus").textContent = t("mp.join.waiting");
         attemptPlayerReconnect();
       } else {
-        $("#mpJoinStatus").textContent = "Couldn't reach host. Check the code.";
+        $("#mpJoinStatus").textContent = t("mp.join.timeout");
         try { peer.destroy(); } catch {}
       }
     }, 8000);
@@ -1033,7 +1038,7 @@ function attemptPlayerReconnect() {
   // Don't bail home — re-establish the connection. The host might have
   // reloaded (in which case they come back at the same peer ID) or be
   // momentarily offline.
-  $("#mpJoinStatus").textContent = "Reconnecting…";
+  $("#mpJoinStatus").textContent = t("mp.reconnecting");
   if (mpReconnectTimer) return; // already trying
   let attempts = 0;
   mpReconnectTimer = setInterval(() => {
@@ -1074,7 +1079,7 @@ function handleMessageFromHost(msg) {
 }
 
 function mpPlayerQuit() {
-  if (!confirm("Leave the game?")) return;
+  if (!confirm(t("mp.leaveConfirm"))) return;
   if (mpReconnectTimer) { clearInterval(mpReconnectTimer); mpReconnectTimer = null; }
   if (mpElectionTimer) { clearInterval(mpElectionTimer); mpElectionTimer = null; }
   clearMpSaved("player");
@@ -1181,7 +1186,7 @@ async function attemptHostTakeover() {
     if (err.type === "unavailable-id") {
       // The original host came back, or another player won the election.
       // Fall back to rejoining as a regular player.
-      alert("Couldn't take over — another host is online. Rejoining as a player.");
+      alert(t("mp.takeoverFailed"));
       mpGame = null;
       // Show join screen with code prefilled so they can re-enter quickly.
       showScreen("mpJoin");
@@ -1241,15 +1246,15 @@ function renderMpHostLobby() {
     row.className = "player-row" + (p.peerId === mpGame.myPeerId ? " you" : "");
     row.innerHTML = `
       <span style="flex:1">${escapeHtml(p.name)}</span>
-      <span class="role">${p.isHost ? "host" : ""}${p.peerId === mpGame.myPeerId ? " · you" : ""}</span>`;
+      <span class="role">${p.isHost ? escapeHtml(t("mp.lobby.role.host")) : ""}${p.peerId === mpGame.myPeerId ? " · " + escapeHtml(t("mp.lobby.you")) : ""}</span>`;
     list.appendChild(row);
   }
   $("#mpStartBtn").disabled = mpGame.players.length < 2;
-  $("#mpTargetScoreVal").textContent = $("#mpTargetScore").value;
+  updateTargetScoreLabel("mpTargetScoreLabel", $("#mpTargetScore").value);
 }
 
 function renderMpPlayerLobby() {
-  $("#mpYouAre").textContent = mpGame.myName ? `You: ${mpGame.myName}` : "Connected";
+  $("#mpYouAre").textContent = mpGame.myName ? t("mp.lobby.youAre", { name: mpGame.myName }) : t("mp.lobby.connected");
   const list = $("#mpClientPlayers");
   list.innerHTML = "";
   for (const p of mpGame.players) {
@@ -1257,7 +1262,7 @@ function renderMpPlayerLobby() {
     row.className = "player-row" + (p.peerId === mpGame.myPeerId ? " you" : "");
     row.innerHTML = `
       <span style="flex:1">${escapeHtml(p.name)}</span>
-      <span class="role">${p.isHost ? "host" : ""}${p.peerId === mpGame.myPeerId ? " · you" : ""}</span>`;
+      <span class="role">${p.isHost ? escapeHtml(t("mp.lobby.role.host")) : ""}${p.peerId === mpGame.myPeerId ? " · " + escapeHtml(t("mp.lobby.you")) : ""}</span>`;
     list.appendChild(row);
   }
 }
@@ -1274,8 +1279,8 @@ function renderMpTurn() {
   $("#mpPlayPauseBtn").classList.toggle("hidden", !isHost);
   $("#mpLockInBtn").classList.toggle("hidden", !isMyTurn);
   $("#mpTurnHint").textContent = isMyTurn
-    ? "Tap where this song fits in your timeline."
-    : `Waiting for ${cur ? cur.name : "…"} to place the card.`;
+    ? t("game.tapWhere")
+    : t("game.waitingPlacement", { name: cur ? cur.name : "…" });
 
   // Each phone always shows ITS OWN timeline. When it's not your turn the
   // slot buttons are inert — you're just watching.
@@ -1286,14 +1291,14 @@ function renderMpTurn() {
   const tlEl = $("#mpTimeline");
   tlEl.innerHTML = "";
   if (tl.length === 0) {
-    tlEl.appendChild(mpMakeSlotEl(0, "Place anywhere (first card is always correct)", slotsClickable));
+    tlEl.appendChild(mpMakeSlotEl(0, t("game.slot.empty"), slotsClickable));
   } else {
-    tlEl.appendChild(mpMakeSlotEl(0, `Before ${tl[0].year}`, slotsClickable));
+    tlEl.appendChild(mpMakeSlotEl(0, t("game.slot.before", { year: tl[0].year }), slotsClickable));
     for (let i = 0; i < tl.length; i++) {
       tlEl.appendChild(mpMakeCardEl(tl[i]));
       const label = i < tl.length - 1
-        ? `Between ${tl[i].year} and ${tl[i + 1].year}`
-        : `After ${tl[i].year}`;
+        ? t("game.slot.between", { y1: tl[i].year, y2: tl[i + 1].year })
+        : t("game.slot.after", { year: tl[i].year });
       tlEl.appendChild(mpMakeSlotEl(i + 1, label, slotsClickable));
     }
   }
@@ -1332,12 +1337,12 @@ function mpMakeCardEl(card) {
 }
 
 function mpDescribePlacement(tl) {
-  if (mpGame.selectedSlot === null) return "Pick a slot, then lock in.";
-  if (tl.length === 0) return "Anywhere works for the first card.";
+  if (mpGame.selectedSlot === null) return t("game.pickSlotLockIn");
+  if (tl.length === 0) return t("game.anywhereFirst");
   const i = mpGame.selectedSlot;
-  if (i === 0) return `You think it's before ${tl[0].year}.`;
-  if (i === tl.length) return `You think it's after ${tl[tl.length - 1].year}.`;
-  return `You think it's between ${tl[i - 1].year} and ${tl[i].year}.`;
+  if (i === 0) return t("game.thinkBefore", { year: tl[0].year });
+  if (i === tl.length) return t("game.thinkAfter", { year: tl[tl.length - 1].year });
+  return t("game.thinkBetween", { y1: tl[i - 1].year, y2: tl[i].year });
 }
 
 function renderMpReveal() {
@@ -1347,10 +1352,10 @@ function renderMpReveal() {
   $("#mpRevealYear").textContent   = song.year;
   $("#mpRevealArtist").textContent = song.artist;
   $("#mpRevealTitle").textContent  = song.title;
-  $("#mpRevealRegion").textContent = REGION_LABEL[song.region] || song.region;
+  $("#mpRevealRegion").textContent = regionLabel(song.region);
   const rr = $("#mpRevealResult");
   const correct = mpGame.lastCorrect;
-  rr.textContent = correct ? `✓ ${cur.name} keeps the card` : `✗ ${cur.name} misses`;
+  rr.textContent = correct ? t("game.keepsCard", { name: cur.name }) : t("game.misses", { name: cur.name });
   rr.classList.toggle("good", correct);
   rr.classList.toggle("bad", !correct);
   const isHost = mpGame.role === "host";
@@ -1359,7 +1364,7 @@ function renderMpReveal() {
 }
 
 function renderMpOver() {
-  $("#mpWinnerName").textContent = mpGame.winner || "Nobody";
+  $("#mpWinnerName").textContent = mpGame.winner || t("game.nobody");
   const fs = $("#mpFinalScores");
   fs.innerHTML = "";
   const sorted = [...mpGame.players].sort((a, b) => b.timeline.length - a.timeline.length);
@@ -1398,14 +1403,14 @@ async function startScanner() {
         const id = parseQrPayload(decoded);
         if (!id) return;
         const song = songsById.get(id);
-        if (!song) { alert(`Unknown card id: ${id}`); return; }
+        if (!song) { alert(t("mp.unknownCard", { id })); return; }
         stopScanner();
         freePlay(song);
       },
       () => {}
     );
   } catch (e) {
-    alert("Camera unavailable: " + e.message);
+    alert(t("free.cameraError", { msg: e.message }));
     showScreen("home");
   }
 }
@@ -1425,10 +1430,10 @@ async function ensureFreePlayer() {
     const btn = $("#freePlayPauseBtn");
     if (e.data === YT.PlayerState.PLAYING) {
       v && v.classList.remove("paused");
-      btn && (btn.textContent = "⏸ Pause");
+      btn && (btn.textContent = t("common.pause"));
     } else {
       v && v.classList.add("paused");
-      btn && (btn.textContent = "▶ Play");
+      btn && (btn.textContent = t("common.play"));
     }
   });
   return freeYtPlayer;
@@ -1440,7 +1445,7 @@ async function freePlay(song) {
   $("#freeAnswer").classList.add("hidden");
   showScreen("freePlayer");
   if (!song.youtube_id) {
-    alert("This song isn't verified yet.");
+    alert(t("free.unverified"));
     return;
   }
   const p = await ensureFreePlayer();
@@ -1453,13 +1458,13 @@ function freeReveal() {
   $("#freeAnsYear").textContent  = freeCurrentSong.year;
   $("#freeAnsArtist").textContent = freeCurrentSong.artist;
   $("#freeAnsTitle").textContent  = freeCurrentSong.title;
-  $("#freeAnsRegion").textContent = REGION_LABEL[freeCurrentSong.region] || freeCurrentSong.region;
+  $("#freeAnsRegion").textContent = regionLabel(freeCurrentSong.region);
   $("#freeAnswer").classList.remove("hidden");
 }
 
 function pickRandomVerified() {
   if (verifiedSongs.length === 0) {
-    alert("No verified songs yet — run scripts/verify.py first.");
+    alert(t("free.noVerified"));
     return null;
   }
   return verifiedSongs[Math.floor(Math.random() * verifiedSongs.length)];
@@ -1467,8 +1472,15 @@ function pickRandomVerified() {
 
 // ─── Wire-up ────────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", async () => {
+  // Translate every [data-i18n] element in the static HTML before anything
+  // else runs — the rest of the app then operates on translated DOM.
+  if (typeof applyI18n === "function") applyI18n(document);
+  // Initialize target-score labels (HTML doesn't know the current language).
+  updateTargetScoreLabel("targetScoreLabel", $("#targetScore").value);
+  updateTargetScoreLabel("mpTargetScoreLabel", $("#mpTargetScore").value);
+
   try { await loadSongs(); }
-  catch (e) { $("#dbStatus").textContent = "Failed to load songs.json — " + e.message; }
+  catch (e) { $("#dbStatus").textContent = t("home.dbError", { msg: e.message }); }
 
   refreshResumeButton();
 
@@ -1486,7 +1498,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("#mpJoinBtn").addEventListener("click", joinAsPlayer);
   $("#mpStartBtn").addEventListener("click", mpStartGame);
   $("#mpTargetScore").addEventListener("input", (e) => {
-    $("#mpTargetScoreVal").textContent = e.target.value;
+    updateTargetScoreLabel("mpTargetScoreLabel", e.target.value);
   });
   $("#mpHostQuitBtn").addEventListener("click", mpHostQuit);
   $("#mpPlayerQuitBtn").addEventListener("click", mpPlayerQuit);
@@ -1519,11 +1531,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   $("#addPlayerBtn").addEventListener("click", () => {
     if (setupState.players.length >= 6) return;
-    setupState.players.push(`Player ${setupState.players.length + 1}`);
+    setupState.players.push(t("game.playerDefault", { n: setupState.players.length + 1 }));
     renderPlayersList();
   });
   $("#targetScore").addEventListener("input", (e) => {
-    $("#targetScoreVal").textContent = e.target.value;
+    updateTargetScoreLabel("targetScoreLabel", e.target.value);
   });
   $("#startGameBtn").addEventListener("click", onStartGameTap);
 
