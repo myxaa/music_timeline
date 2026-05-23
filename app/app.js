@@ -28,7 +28,7 @@ let verifiedSongs = [];        // subset with youtube_id
 let songsById = new Map();
 let ytPlayer = null;           // game-mode hidden player
 let freeYtPlayer = null;       // free-play hidden player
-let qrScanner = null;
+// (Live QR scanner state lives in _scanStream/_scanVideo/_scanLoop below.)
 
 let game = null;               // current game state (or null)
 
@@ -1607,39 +1607,39 @@ function dbg(msg) {
   console.log("[cam]", msg);
 }
 
-async function runCameraEnvCheck() {
-  _dbgLines = [];
+function logCameraEnv() {
+  // Synchronous-only env dump. Anything that involves await would burn the
+  // user gesture's transient activation before we get to getUserMedia, which
+  // makes Firefox Mobile reject the camera request with NotAllowedError.
   dbg(`UA: ${navigator.userAgent.slice(0, 80)}`);
   dbg(`mediaDevices: ${"mediaDevices" in navigator ? "YES" : "NO"}`);
   dbg(`getUserMedia: ${!!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) ? "YES" : "NO"}`);
-  if (navigator.permissions) {
-    try {
-      const p = await navigator.permissions.query({ name: "camera" });
-      dbg(`permissions API camera: ${p.state}`);
-    } catch (e) {
-      dbg(`permissions API: ${e.name} (${e.message})`);
-    }
-  } else {
-    dbg("permissions API: not supported");
-  }
-  dbg(`protocol: ${location.protocol}`);
-  dbg(`hostname: ${location.hostname}`);
+  dbg(`jsQR: ${typeof window.jsQR === "function" ? "YES" : "NO"}`);
+  dbg(`protocol: ${location.protocol}  hostname: ${location.hostname}`);
 }
+
+// Live-scan state — replaces the old html5-qrcode-based qrScanner.
+let _scanStream = null;
+let _scanVideo = null;
+let _scanLoop = null;
 
 async function startScanner() {
   showScreen("scanner");
-  if (qrScanner) await stopScanner();
+  await stopScanner();
   $("#qrFileFallback").classList.add("hidden");
   $("#scanHint").textContent = t("free.cameraRetrying");
 
-  await runCameraEnvCheck();
+  _dbgLines = [];
+  logCameraEnv();
 
-  // Step 1: use the native getUserMedia to get the browser to show its
-  // camera permission prompt. html5-qrcode.start() silently resolves on
-  // Firefox Mobile even when it didn't actually open the camera, so we
-  // can't rely on it for the prompt.
+  // ONE getUserMedia call. We attach the resulting stream to our own video
+  // element and decode frames with jsQR. The previous implementation called
+  // getUserMedia twice (probe, release, html5-qrcode.start), which on mobile
+  // Chrome would silently hang and on Firefox Mobile would reject the second
+  // call with NotAllowedError because the user gesture had already expired.
   const attempts = [
     { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } } },
+    { video: { facingMode: "environment" } },
     { video: { facingMode: "user" } },
     { video: true },
   ];
@@ -1650,15 +1650,19 @@ async function startScanner() {
     dbg(`getUserMedia attempt ${i + 1}/${attempts.length}: ${JSON.stringify(c)}`);
     try {
       stream = await navigator.mediaDevices.getUserMedia(c);
-      dbg(`✓ getUserMedia success — tracks: ${stream.getTracks().map(t => t.kind + "/" + t.label).join(", ")}`);
+      const track = stream.getVideoTracks()[0];
+      const settings = (track && track.getSettings) ? track.getSettings() : {};
+      dbg(`✓ track: ${track?.label || "(no label)"} ${settings.width || "?"}x${settings.height || "?"}`);
       break;
     } catch (e) {
       dbg(`✗ ${e.name}: ${e.message}`);
-      if (e.name === "NotAllowedError" || e.name === "PermissionDeniedError") {
-        $("#scanHint").textContent = t("free.cameraError", { msg: "Camera access denied" });
+      if (e.name === "NotAllowedError" || e.name === "PermissionDeniedError" ||
+          e.name === "SecurityError") {
+        $("#scanHint").textContent = t("free.cameraError", { msg: e.name });
         $("#qrFileFallback").classList.remove("hidden");
         return;
       }
+      // OverconstrainedError etc. → try the next constraint.
     }
   }
 
@@ -1669,41 +1673,99 @@ async function startScanner() {
     return;
   }
 
-  // Step 2: permission confirmed — release probe stream, let html5-qrcode take over.
-  stream.getTracks().forEach((t) => t.stop());
-  dbg("Probe stream released. Starting html5-qrcode…");
+  _scanStream = stream;
 
-  qrScanner = new Html5Qrcode("reader");
+  const reader = $("#reader");
+  reader.innerHTML = "";
+  const video = document.createElement("video");
+  video.setAttribute("playsinline", "");
+  video.setAttribute("muted", "");
+  video.muted = true;
+  video.autoplay = true;
+  video.style.width = "100%";
+  video.style.height = "100%";
+  video.style.objectFit = "cover";
+  video.srcObject = stream;
+  reader.appendChild(video);
+  _scanVideo = video;
+
   try {
-    await qrScanner.start(
-      { facingMode: { ideal: "environment" } },
-      { fps: 12, qrbox: { width: 240, height: 240 } },
-      onQrDecoded,
-      () => {}
-    );
-    dbg("✓ html5-qrcode started");
-    $("#scanHint").textContent = t("free.scanHint");
+    await video.play();
+    dbg("✓ video.play()");
   } catch (e) {
-    dbg(`✗ html5-qrcode.start: ${e.name}: ${e.message}`);
-    $("#scanHint").textContent = t("free.cameraError", { msg: e.message });
-    $("#qrFileFallback").classList.remove("hidden");
-    qrScanner = null;
+    dbg(`video.play warn: ${e.name}: ${e.message}`);
   }
+
+  $("#scanHint").textContent = t("free.scanHint");
+
+  // Decode loop — sample at ~6fps. Center-crop the frame to a square that
+  // roughly matches the viewfinder so jsQR has less data to chew through
+  // on phones.
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+  _scanLoop = setInterval(() => {
+    if (!_scanVideo || _scanVideo.readyState < 2 || typeof jsQR !== "function") return;
+    const vw = _scanVideo.videoWidth, vh = _scanVideo.videoHeight;
+    if (!vw || !vh) return;
+    const side = Math.min(vw, vh);
+    const sx = (vw - side) / 2, sy = (vh - side) / 2;
+    canvas.width = side;
+    canvas.height = side;
+    try {
+      ctx.drawImage(_scanVideo, sx, sy, side, side, 0, 0, side, side);
+      const data = ctx.getImageData(0, 0, side, side);
+      const code = jsQR(data.data, side, side, { inversionAttempts: "dontInvert" });
+      if (code && code.data) {
+        dbg(`✓ decoded: ${code.data.slice(0, 60)}`);
+        onQrDecoded(code.data);
+      }
+    } catch (e) {
+      // drawImage / getImageData can throw on transient video glitches;
+      // safest to ignore and try next tick.
+    }
+  }, 160);
 }
 
 async function stopScanner() {
-  if (!qrScanner) return;
-  try { await qrScanner.stop(); } catch {}
-  try { await qrScanner.clear(); } catch {}
-  qrScanner = null;
+  if (_scanLoop) { clearInterval(_scanLoop); _scanLoop = null; }
+  if (_scanVideo) {
+    try { _scanVideo.pause(); } catch {}
+    try { _scanVideo.srcObject = null; } catch {}
+    _scanVideo.remove();
+    _scanVideo = null;
+  }
+  if (_scanStream) {
+    _scanStream.getTracks().forEach((t) => { try { t.stop(); } catch {} });
+    _scanStream = null;
+  }
 }
 
-// File-input fallback: decode a QR from a chosen image using Html5Qrcode.
+// File-input fallback: decode a QR from a chosen image with jsQR.
 async function handleQrFile(file) {
   if (!file) return;
+  if (typeof jsQR !== "function") {
+    alert("QR decoder not loaded — refresh and try again.");
+    return;
+  }
   try {
-    const result = await Html5Qrcode.scanFile(file, /* showImage= */ false);
-    onQrDecoded(result);
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth || img.width;
+    canvas.height = img.naturalHeight || img.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(url);
+    const code = jsQR(data.data, canvas.width, canvas.height);
+    if (code && code.data) {
+      onQrDecoded(code.data);
+    } else {
+      alert(t("free.cameraError", { msg: "No QR code in image" }));
+    }
   } catch (e) {
     alert(t("free.cameraError", { msg: e.message }));
   }

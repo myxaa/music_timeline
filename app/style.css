@@ -1306,13 +1306,16 @@ html.theme-system .target-pills .pill.on { background: var(--accent); color: var
   inset: 12px;
   border-radius: 12px;
   overflow: hidden;
-  background: rgba(0,0,0,0.5);
+  background: transparent;
 }
 .viewfinder #reader video,
 .viewfinder #reader canvas,
 .viewfinder #reader img {
-  max-width: 100% !important;
   width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  object-fit: cover;
+  display: block;
 }
 
 .scanner-screen h2 {
