@@ -32,8 +32,32 @@ let freeYtPlayer = null;       // free-play hidden player
 
 let game = null;               // current game state (or null)
 
-// ─── Screens ────────────────────────────────────────────────────────────────
-function showScreen(name) {
+// ─── Screens + URL routing ──────────────────────────────────────────────────
+// Friendly hash slugs so a browser refresh lands the user on the same
+// screen. Hash-only (no path changes) keeps GitHub Pages happy without
+// needing a 404.html SPA fallback.
+const SCREEN_TO_HASH = {
+  home: "",
+  gameSetup:     "new",
+  passPhone:     "pass",
+  gameTurn:      "play",
+  gameReveal:    "reveal",
+  gameOver:      "win",
+  mpJoin:        "join",
+  mpHostLobby:   "host",
+  mpPlayerLobby: "lobby",
+  mpTurn:        "mp-play",
+  mpReveal:      "mp-reveal",
+  mpOver:        "mp-win",
+  scanner:       "scan",
+  freePlayer:    "free",
+  printScreen:   "print",
+};
+const HASH_TO_SCREEN = Object.fromEntries(
+  Object.entries(SCREEN_TO_HASH).map(([k, v]) => [v, k])
+);
+
+function showScreen(name, opts) {
   $$(".screen").forEach((s) => s.classList.toggle("active", s.id === name));
   if (name !== "scanner") stopScanner();
   if (name !== "gameTurn") {
@@ -42,6 +66,96 @@ function showScreen(name) {
   }
   if (name !== "freePlayer") {
     if (freeYtPlayer && freeYtPlayer.stopVideo) try { freeYtPlayer.stopVideo(); } catch {}
+  }
+  // Sync the URL hash unless this call is itself a reaction to back/forward
+  // navigation (opts.fromPop) — pushing the same state again would otherwise
+  // pile up duplicate history entries.
+  if (!(opts && opts.fromPop)) syncRouteFromScreen(name);
+}
+
+function syncRouteFromScreen(name) {
+  const target = SCREEN_TO_HASH[name];
+  if (target === undefined) return;
+  const currentSlug = (location.hash || "").replace(/^#/, "");
+  if (currentSlug === target) return;
+  const newUrl = target
+    ? "#" + target
+    : location.pathname + location.search;
+  try {
+    history.pushState({ screen: name }, "", newUrl);
+  } catch {
+    // pushState can throw on file:// or in some sandboxed contexts;
+    // fall back to the assignment, which still updates the bar.
+    if (target) location.hash = target;
+  }
+}
+
+// Browser back/forward — re-derive the screen from the URL.
+window.addEventListener("popstate", () => {
+  const slug = (location.hash || "").replace(/^#/, "");
+  const target = HASH_TO_SCREEN[slug] || "home";
+  showScreen(target, { fromPop: true });
+});
+
+// On a fresh load, dispatch the URL hash to the right setup function.
+// Most screens are "just show it", but a few need state plumbing first
+// (openSetup primes the new-game form; printScreen needs its summary
+// rendered; game-phase screens need a saved game to be meaningful).
+function openRoutedScreen(name) {
+  switch (name) {
+    case "gameSetup":
+      openSetup();
+      return true;
+    case "scanner":
+      // Don't auto-start the camera — user gesture is required on mobile.
+      showScreen("scanner");
+      return true;
+    case "printScreen":
+      renderPrintScreen();
+      showScreen("printScreen");
+      return true;
+    case "mpJoin":
+      showScreen("mpJoin");
+      return true;
+    case "gameTurn":
+    case "gameReveal":
+    case "gameOver":
+    case "passPhone": {
+      const saved = loadGameFromStorage();
+      if (saved && saved.phase !== "over") {
+        resumeGame();
+        return true;
+      }
+      return false;
+    }
+    case "mpHostLobby":
+    case "mpTurn":
+    case "mpReveal":
+    case "mpOver": {
+      const hostSaved = loadMpSaved("host");
+      if (hostSaved && hostSaved.phase !== "over") {
+        resumeHostedGame();
+        return true;
+      }
+      return false;
+    }
+    case "mpPlayerLobby": {
+      const playerSaved = loadMpSaved("player");
+      if (playerSaved && playerSaved.phase !== "over") {
+        resumePlayerGame();
+        return true;
+      }
+      return false;
+    }
+    case "freePlayer":
+      // Free-play needs a song; without ?id=… we can't recover, so let the
+      // caller fall through to home.
+      return false;
+    case "home":
+      showScreen("home");
+      return true;
+    default:
+      return false;
   }
 }
 
@@ -2033,21 +2147,37 @@ document.addEventListener("DOMContentLoaded", async () => {
     el.addEventListener("click", () => showScreen(el.dataset.screen));
   });
 
-  // Deep links:
-  //   ?id=<song-id>  → free-play a specific song (scan flow w/ native camera)
-  //   ?join=<code>   → jump straight to the join screen with the code prefilled
+  // Pick the screen to land on. Priority:
+  //   1. Explicit query-string deep links (?id=…, ?join=…)
+  //   2. URL hash route (so refreshing keeps the same screen)
+  //   3. Auto-resume of an in-progress multiplayer or single-device game
+  //   4. Home
   const params = new URLSearchParams(location.search);
   const linkedId = params.get("id");
+  const joinCode = (params.get("join") || "").trim().toUpperCase();
+  const isJoinDeepLink = /^[A-Z]{4}$/.test(joinCode);
+
+  let handled = false;
+
   if (linkedId) {
     const song = songsById.get(linkedId);
-    if (song) freePlay(song);
+    if (song) { freePlay(song); handled = true; }
   }
-  const joinCode = (params.get("join") || "").trim().toUpperCase();
-  if (/^[A-Z]{4}$/.test(joinCode)) {
+
+  if (!handled && isJoinDeepLink) {
     showScreen("mpJoin");
     $("#mpCodeInput").value = joinCode;
     // Focus the name field — they only need to fill that in.
     setTimeout(() => $("#mpNameInput").focus(), 50);
+    handled = true;
+  }
+
+  if (!handled) {
+    const slug = (location.hash || "").replace(/^#/, "");
+    const target = HASH_TO_SCREEN[slug];
+    if (target && target !== "home") {
+      handled = openRoutedScreen(target);
+    }
   }
 
   if ("serviceWorker" in navigator) {
@@ -2068,8 +2198,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  // Auto-resume on reload. Deep-link join (?join=…) wins over auto-resume.
-  if (!linkedId && !/^[A-Z]{4}$/.test(joinCode)) {
+  // Auto-resume only kicks in if no explicit deep link or hash already
+  // chose a screen — otherwise the user's URL wins.
+  if (!handled) {
     const hostSaved = loadMpSaved("host");
     const playerSaved = loadMpSaved("player");
     if (hostSaved && hostSaved.phase !== "over") {

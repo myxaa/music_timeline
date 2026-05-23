@@ -23,7 +23,7 @@
 // string is used for the cache name + the ?v=… query on shell assets).
 // Use scripts/bump_version.py to keep them in lockstep.
 
-const VERSION = "20260523e";
+const VERSION = "20260523f";
 const CACHE = "mt-shell-" + VERSION;
 
 const SHELL = [
