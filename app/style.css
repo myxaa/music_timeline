@@ -1267,21 +1267,36 @@ html.theme-system .target-pills .pill.on { background: var(--accent); color: var
 .scanner-screen {
   background: var(--ink) !important;
   color: var(--bg) !important;
+  /* Tighter top padding — we want as much real estate as possible for the
+     viewfinder. The safe-area inset on #app still keeps us off the notch. */
+  padding: 22px 22px 28px;
 }
 .scanner-screen .topbar-label { color: rgba(244,237,224,0.5); }
-.scanner-screen .close,
 .scanner-screen .iconbtn {
   background: rgba(244,237,224,0.1);
   border-color: rgba(244,237,224,0.2);
   color: var(--bg);
 }
+/* Central stack that holds the viewfinder + heading + help, vertically
+   centered between the top bar and any auxiliary controls below. */
+.scan-stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 0;
+  width: 100%;
+  text-align: center;
+}
 .viewfinder {
   position: relative;
-  width: 260px; height: 260px;
+  width: min(280px, 78vw);
+  aspect-ratio: 1 / 1;
   background: rgba(255,255,255,0.03);
   border-radius: 18px;
-  align-self: center;
-  margin: auto auto 18px;
+  flex: 0 0 auto;
 }
 .viewfinder .corner {
   position: absolute;
@@ -1320,15 +1335,17 @@ html.theme-system .target-pills .pill.on { background: var(--accent); color: var
 
 .scanner-screen h2 {
   color: var(--bg);
-  margin: 12px 0 4px;
+  margin: 0;
   text-align: center;
+  font-size: 1.6rem;
 }
 .scanner-screen .scan-help {
   color: rgba(244,237,224,0.6);
   text-align: center;
   font-size: 14px;
   max-width: 260px;
-  margin: 0 auto 12px;
+  margin: 0 auto;
+  line-height: 1.4;
 }
 
 .qr-file-label {

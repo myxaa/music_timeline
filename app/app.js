@@ -1624,19 +1624,23 @@ let _scanVideo = null;
 let _scanLoop = null;
 
 async function startScanner() {
+  // EVERYTHING up to the first `await` must be synchronous so Firefox
+  // Mobile still has the click's transient activation when we call
+  // getUserMedia. stopScanner() used to be async — calling it through
+  // `await` introduced a microtask hop that FF treated as activation
+  // expiry, rejecting with NotAllowedError "in the current context".
   showScreen("scanner");
-  await stopScanner();
+  stopScanner();
   $("#qrFileFallback").classList.add("hidden");
   $("#scanHint").textContent = t("free.cameraRetrying");
-
   _dbgLines = [];
   logCameraEnv();
 
-  // ONE getUserMedia call. We attach the resulting stream to our own video
-  // element and decode frames with jsQR. The previous implementation called
-  // getUserMedia twice (probe, release, html5-qrcode.start), which on mobile
-  // Chrome would silently hang and on Firefox Mobile would reject the second
-  // call with NotAllowedError because the user gesture had already expired.
+  // ONE getUserMedia call. We attach the resulting stream to our own
+  // video element and decode frames with jsQR. The previous flow called
+  // getUserMedia twice (probe, release, html5-qrcode.start), which on
+  // mobile Chrome silently hung and on FF Mobile failed with
+  // NotAllowedError because the user gesture had already expired.
   const attempts = [
     { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } } },
     { video: { facingMode: "environment" } },
@@ -1645,6 +1649,7 @@ async function startScanner() {
   ];
 
   let stream = null;
+  let lastErr = null;
   for (let i = 0; i < attempts.length; i++) {
     const c = attempts[i];
     dbg(`getUserMedia attempt ${i + 1}/${attempts.length}: ${JSON.stringify(c)}`);
@@ -1655,11 +1660,13 @@ async function startScanner() {
       dbg(`✓ track: ${track?.label || "(no label)"} ${settings.width || "?"}x${settings.height || "?"}`);
       break;
     } catch (e) {
+      lastErr = e;
       dbg(`✗ ${e.name}: ${e.message}`);
       if (e.name === "NotAllowedError" || e.name === "PermissionDeniedError" ||
           e.name === "SecurityError") {
-        $("#scanHint").textContent = t("free.cameraError", { msg: e.name });
-        $("#qrFileFallback").classList.remove("hidden");
+        // Tell apart "previously denied" from "user dismissed the prompt"
+        // so we can give actionable instructions to FF Mobile users.
+        await reportCameraBlocked(e);
         return;
       }
       // OverconstrainedError etc. → try the next constraint.
@@ -1668,7 +1675,9 @@ async function startScanner() {
 
   if (!stream) {
     dbg("All getUserMedia attempts failed → showing file fallback");
-    $("#scanHint").textContent = t("free.cameraError", { msg: "No camera found" });
+    $("#scanHint").textContent = t("free.cameraError", {
+      msg: lastErr ? lastErr.name : "No camera found"
+    });
     $("#qrFileFallback").classList.remove("hidden");
     return;
   }
@@ -1727,7 +1736,9 @@ async function startScanner() {
   }, 160);
 }
 
-async function stopScanner() {
+// Synchronous on purpose — see comment in startScanner about transient
+// activation. Nothing in here actually needs to await anything.
+function stopScanner() {
   if (_scanLoop) { clearInterval(_scanLoop); _scanLoop = null; }
   if (_scanVideo) {
     try { _scanVideo.pause(); } catch {}
@@ -1739,6 +1750,29 @@ async function stopScanner() {
     _scanStream.getTracks().forEach((t) => { try { t.stop(); } catch {} });
     _scanStream = null;
   }
+}
+
+// After getUserMedia rejects with a permission-class error, query the
+// Permissions API to differentiate "previously denied" (user must reset
+// site settings) from "prompt dismissed" (user can just try again).
+async function reportCameraBlocked(err) {
+  let state = "unknown";
+  if (navigator.permissions) {
+    try {
+      const p = await navigator.permissions.query({ name: "camera" });
+      state = p.state;
+    } catch {}
+  }
+  dbg(`permission state after error: ${state}`);
+  const hint = $("#scanHint");
+  if (state === "denied") {
+    hint.textContent = t("free.cameraDenied");
+  } else if (err.name === "SecurityError") {
+    hint.textContent = t("free.cameraInsecure");
+  } else {
+    hint.textContent = t("free.cameraDismissed");
+  }
+  $("#qrFileFallback").classList.remove("hidden");
 }
 
 // File-input fallback: decode a QR from a chosen image with jsQR.
