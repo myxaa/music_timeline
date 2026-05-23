@@ -10,6 +10,7 @@ The repo includes:
 | `scripts/verify.py` | Searches YouTube via yt-dlp, captures a real video ID per song, sanity-checks duration. Idempotent. |
 | `scripts/build_songs.py` | Regenerates `songs.json` from the curated tuple list while preserving prior verification data. |
 | `scripts/make_cards.py` | Generates a printable PDF: 3×3 cards per A4 sheet, fronts with QR, backs with the answer, mirrored for duplex printing. |
+| `scripts/bump_version.py` | Bumps the cache-busting version in `app/index.html` and `app/sw.js` in lockstep. Run before each release. |
 | `app/` | Cross-platform PWA: QR scanner + hidden YouTube player + reveal. Works on iOS and Android via the browser, installable to home screen. |
 
 ## Regional mix

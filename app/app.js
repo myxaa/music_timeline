@@ -1955,7 +1955,21 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
+    // updateViaCache:"none" → the browser never serves sw.js from HTTP
+    // cache, so we can always ship a new SW by pushing a new sw.js.
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => {});
+
+    // When a brand-new SW (one with new behavior) takes over this tab,
+    // reload so the user actually sees the fresh shell. The first install
+    // case — where `controller` was null and the SW is just claiming an
+    // uncontrolled tab — isn't a "user-facing update," so skip it.
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloading = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (!hadController || reloading) return;
+      reloading = true;
+      window.location.reload();
+    });
   }
 
   // Auto-resume on reload. Deep-link join (?join=…) wins over auto-resume.
