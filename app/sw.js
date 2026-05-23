@@ -1,12 +1,12 @@
 // Minimal service worker — caches the app shell so the PWA installs and
 // reopens cleanly. We deliberately do NOT cache songs.json (it gets updated
 // every verification run) or the YouTube iframe (live network).
-const CACHE = "mt-shell-v7";
+const CACHE = "mt-shell-v8";
 const SHELL = [
   "./", "./index.html", "./manifest.json",
-  "./style.css?v=20260522e",
-  "./i18n.js?v=20260522e",
-  "./app.js?v=20260522e",
+  "./style.css?v=20260523a",
+  "./i18n.js?v=20260523a",
+  "./app.js?v=20260523a",
 ];
 
 self.addEventListener("install", (e) => {

@@ -137,10 +137,25 @@ async function ensureGamePlayer() {
 }
 
 function onGamePlayerStateChange(e) {
-  const btn = $("#playPauseBtn");
+  const playing = e.data === YT.PlayerState.PLAYING;
+  setPlayIcon($("#playPauseBtn"), playing);
+  setPlayIcon($("#playPauseInlineBtn"), playing);
+  const wf = $("#gameWaveform");
+  if (wf) wf.classList.toggle("paused", !playing);
+}
+
+// SVG glyphs for play/pause — keep them tiny inline rather than fetching.
+const PAUSE_SVG = '<svg width="14" height="14" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>';
+const PLAY_SVG  = '<svg width="14" height="14" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>';
+const PAUSE_SVG_LG = '<svg width="20" height="20" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>';
+const PLAY_SVG_LG  = '<svg width="20" height="20" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>';
+
+function setPlayIcon(btn, playing) {
   if (!btn) return;
-  if (e.data === YT.PlayerState.PLAYING) btn.textContent = "⏸";
-  else                                    btn.textContent = "▶";
+  const lg = btn.classList.contains("play-btn");
+  btn.innerHTML = playing
+    ? (lg ? PAUSE_SVG_LG : PAUSE_SVG)
+    : (lg ? PLAY_SVG_LG  : PLAY_SVG);
 }
 
 async function drawForCurrentPlayer() {
@@ -192,10 +207,16 @@ function renderTurn() {
 }
 
 function makeSlotEl(index, label) {
+  // Keep `label` for screen readers; the visible text follows the mockup
+  // ("TAP TO PLACE" / "PLACE HERE" with an arrow), while the descriptive
+  // placement string ("Before 1985", etc.) appears in #placementHint.
   const el = document.createElement("button");
   el.type = "button";
-  el.className = "slot" + (game.selectedSlot === index ? " selected" : "");
-  el.textContent = label;
+  const active = game.selectedSlot === index;
+  el.className = "slot" + (active ? " selected" : "");
+  el.dataset.slot = index;
+  el.setAttribute("aria-label", label);
+  el.innerHTML = slotInnerHTML(active);
   el.addEventListener("click", () => {
     game.selectedSlot = index;
     saveGame();
@@ -210,11 +231,26 @@ function makeCardEl(card) {
   if (card.region) el.dataset.region = card.region;
   el.innerHTML = `
     <div class="y">${card.year}</div>
+    <div class="divider-v"></div>
     <div class="meta">
-      <strong>${escapeHtml(card.artist)}</strong>
-      <span class="muted">${escapeHtml(card.title)}</span>
-    </div>`;
+      <strong>${escapeHtml(card.title || "—")}</strong>
+      <span>${escapeHtml(card.artist || " ")}</span>
+    </div>
+    <div class="dot"></div>`;
   return el;
+}
+
+// Inner HTML for a timeline slot button. Matches the mockup's two states.
+function slotInnerHTML(active) {
+  if (active) {
+    return (
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none">'
+      + '<path d="M12 5v14M5 12l7 7 7-7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>'
+      + '</svg>'
+      + '<span>PLACE HERE</span>'
+    );
+  }
+  return '<span>TAP TO PLACE</span>';
 }
 
 function escapeHtml(s) {
@@ -275,10 +311,11 @@ function revealAndScore() {
   $("#revealArtist").textContent = game.currentSong.artist;
   $("#revealTitle").textContent  = game.currentSong.title;
   $("#revealRegion").textContent = regionLabel(game.currentSong.region);
+  // Result line is replaced by the CORRECT/MISSED stamp overlay; keep the
+  // element empty so the screen layout stays the same.
   const rr = $("#revealResult");
-  rr.textContent = correct ? t("game.keepsCard", { name: me.name }) : t("game.misses", { name: me.name });
-  rr.classList.toggle("good", correct);
-  rr.classList.toggle("bad", !correct);
+  rr.textContent = "";
+  rr.classList.remove("good", "bad");
 
   // Win condition?
   if (me.timeline.length >= game.targetScore) {
@@ -287,7 +324,29 @@ function revealAndScore() {
     saveGame();
   }
 
+  // Continue button label reflects outcome.
+  const cont = $("#continueBtn");
+  cont.textContent = correct
+    ? t("game.keepCardN", { n: me.timeline.length, target: game.targetScore })
+    : t("game.passNext");
+
   showScreen("gameReveal");
+  slapStamp($(".reveal-stage", $("#gameReveal")), correct);
+}
+
+// Drop the CORRECT / MISSED ink stamp on top of the given container after
+// a short delay so it lands AFTER the card flip-in animation completes.
+function slapStamp(container, correct) {
+  if (!container) return;
+  container.querySelectorAll(".inkstamp").forEach((el) => el.remove());
+  setTimeout(() => {
+    const st = document.createElement("div");
+    st.className = "inkstamp " + (correct ? "good" : "bad");
+    st.innerHTML =
+      '<div class="label">' + (correct ? "CORRECT" : "MISSED") + '</div>' +
+      '<div class="sub">' + (correct ? "+1 CARD" : "PASS PHONE") + '</div>';
+    container.appendChild(st);
+  }, 600);
 }
 
 function continueToNextTurn() {
@@ -299,9 +358,10 @@ function continueToNextTurn() {
   game.phase = "draw";
   game.selectedSlot = null;
   game.currentSong = null;
+  // Stop the previous song before the next player picks up the phone.
+  if (ytPlayer && ytPlayer.stopVideo) try { ytPlayer.stopVideo(); } catch {}
   saveGame();
-  showScreen("gameTurn");
-  drawForCurrentPlayer();
+  showPassThenDraw();
 }
 
 function finishGame() {
@@ -315,18 +375,51 @@ function finishGame() {
     game.winner = name;
   }
   saveGame();
-  $("#winnerName").textContent = game.winner;
-  const fs = $("#finalScores");
-  fs.innerHTML = "";
-  const sorted = [...game.players].sort((a, b) => b.timeline.length - a.timeline.length);
-  for (const p of sorted) {
-    const row = document.createElement("div");
-    row.className = "row";
-    row.innerHTML = `<span>${escapeHtml(p.name)}</span><strong>${p.timeline.length}</strong>`;
-    fs.appendChild(row);
-  }
+  const winner = game.players.find((p) => p.name === game.winner) || game.players[0];
+  renderWinnerStack({
+    nameEl: $("#winnerName"),
+    crownEl: $("#winnerCrown"),
+    tallyEl: $("#winnerTally"),
+    tickerEl: $("#finalScores"),
+    name: winner.name,
+    timeline: winner.timeline,
+  });
   showScreen("gameOver");
 }
+
+// Mockup-faithful winner panel: crown + big italic name + year-chip ticker.
+function renderWinnerStack({ nameEl, crownEl, tallyEl, tickerEl, name, timeline }) {
+  nameEl.textContent = name;
+  crownEl.innerHTML = CROWN_SVG;
+  tallyEl.textContent = t("game.winnerCards", { n: timeline.length });
+  tickerEl.innerHTML = "";
+  for (const c of timeline.slice(0, 10)) {
+    const chip = document.createElement("div");
+    chip.className = "yc";
+    chip.textContent = c.year;
+    tickerEl.appendChild(chip);
+  }
+}
+
+// Crown — pixel-faithful port of the SVG in screens-2.jsx WinScreen.
+const CROWN_SVG = (
+  '<svg width="200" height="120" viewBox="0 0 200 120" style="position:absolute;top:-78px;left:50%;transform:translateX(-50%);pointer-events:none">'
+  + '<defs><radialGradient id="gem-a" cx="50%" cy="40%" r="60%">'
+  + '<stop offset="0%" stop-color="var(--accent)" stop-opacity="1"/>'
+  + '<stop offset="100%" stop-color="var(--accent)" stop-opacity="0.4"/>'
+  + '</radialGradient></defs>'
+  + '<path d="M30 95 L 35 50 L 60 78 L 80 30 L 100 70 L 120 30 L 140 78 L 165 50 L 170 95 Z" fill="var(--ink)" stroke="var(--ink)" stroke-width="2" stroke-linejoin="round"/>'
+  + '<rect x="30" y="92" width="140" height="9" rx="2" fill="var(--ink)"/>'
+  + '<circle cx="60" cy="96" r="3.5" fill="url(#gem-a)"/>'
+  + '<circle cx="100" cy="96" r="4" fill="url(#gem-a)"/>'
+  + '<circle cx="140" cy="96" r="3.5" fill="url(#gem-a)"/>'
+  + '<circle cx="80" cy="28" r="5" fill="var(--accent)"/>'
+  + '<circle cx="120" cy="28" r="5" fill="var(--accent)"/>'
+  + '<circle cx="35" cy="48" r="4" fill="var(--accent)"/>'
+  + '<circle cx="165" cy="48" r="4" fill="var(--accent)"/>'
+  + '<circle cx="100" cy="68" r="4" fill="var(--accent)"/>'
+  + '</svg>'
+);
 
 function quitGame() {
   if (!confirm(t("game.quitConfirm"))) return;
@@ -343,13 +436,21 @@ function renderPlayersList() {
   list.innerHTML = "";
   const names = setupState.players;
   names.forEach((name, idx) => {
+    const initial = ((name || "").trim().charAt(0) || (idx + 1).toString()).toUpperCase();
+    const color = PLAYER_COLORS[idx % PLAYER_COLORS.length];
     const row = document.createElement("div");
     row.className = "player-row";
     row.innerHTML = `
+      <div class="avatar" style="background:${color}">${escapeHtml(initial)}</div>
       <input type="text" value="${escapeHtml(name)}" placeholder="Player ${idx + 1}" />
-      <button class="del" aria-label="Remove">−</button>`;
+      <button class="del" aria-label="Remove">×</button>`;
     const input = row.querySelector("input");
-    input.addEventListener("input", () => { setupState.players[idx] = input.value; });
+    const avatar = row.querySelector(".avatar");
+    input.addEventListener("input", () => {
+      setupState.players[idx] = input.value;
+      const ch = (input.value.trim().charAt(0) || (idx + 1).toString()).toUpperCase();
+      avatar.textContent = ch;
+    });
     row.querySelector(".del").addEventListener("click", () => {
       if (setupState.players.length <= 2) return;
       setupState.players.splice(idx, 1);
@@ -399,9 +500,54 @@ async function onStartGameTap() {
   if (verifiedSongs.filter((s) => regions.includes(s.region)).length < targetScore * playerNames.length) {
     if (!confirm(t("setup.lowSongs"))) return;
   }
-  showScreen("gameTurn");
-  await startGame({ playerNames, targetScore, regions });
+  // Initialize state first so the pass screen knows who's up. Then show pass;
+  // when the player taps "Start my turn" we draw + flip to gameTurn.
+  game = newGameState({ playerNames, targetScore, regions });
+  saveGame();
+  showPassThenDraw();
 }
+
+// Single-device flow only — between turns and at game start, show the
+// "pass the phone" interstitial so the next player has a moment to grab the
+// device. Multiplayer phones don't need it (each phone is one player).
+function showPassThenDraw() {
+  renderPass();
+  showScreen("passPhone");
+}
+
+function renderPass() {
+  if (!game) return;
+  const me = game.players[game.turnIdx];
+  const color = PLAYER_COLORS[game.turnIdx % PLAYER_COLORS.length];
+  const avatar = $("#passAvatar");
+  avatar.textContent = (me.name || "?").trim().charAt(0).toUpperCase();
+  avatar.style.background = color;
+  $("#passWho").textContent = me.name;
+  $("#passProgress").textContent =
+    `${me.timeline.length} / ${game.targetScore} ` +
+    (game.targetScore === 1 ? "card" : "cards");
+  const mini = $("#passMini");
+  mini.innerHTML = "";
+  if (!me.timeline.length) {
+    const empty = document.createElement("div");
+    empty.className = "mini-empty";
+    empty.textContent = t("pass.noCards");
+    mini.appendChild(empty);
+  } else {
+    for (const c of me.timeline) {
+      const chip = document.createElement("div");
+      chip.className = "year-chip";
+      chip.textContent = c.year;
+      mini.appendChild(chip);
+    }
+  }
+  // Button label "I'm Mara — start my turn"
+  $("#passStartLabel").textContent = t("pass.startWithName", { name: me.name });
+}
+
+const PLAYER_COLORS = [
+  "#c9a04a", "#c84e2c", "#6b8e4e", "#a78bfa", "#5b8db8", "#d97b8e",
+];
 
 function refreshResumeButton() {
   const saved = loadGameFromStorage();
@@ -436,18 +582,26 @@ async function resumeGame() {
   const saved = loadGameFromStorage();
   if (!saved) return;
   game = saved;
-  showScreen("gameTurn");
-  await ensureGamePlayer();
-  if (game.phase === "place" && game.currentSong && ytPlayer && ytPlayer.loadVideoById) {
-    try { ytPlayer.loadVideoById({ videoId: game.currentSong.youtube_id }); } catch {}
-  } else if (game.phase === "draw") {
-    drawForCurrentPlayer();
-  } else if (game.phase === "reveal") {
-    showScreen("gameReveal");
-  } else if (game.phase === "over") {
+  if (game.phase === "over") {
     finishGame();
+    return;
   }
-  renderTurn();
+  if (game.phase === "reveal") {
+    showScreen("gameReveal");
+    return;
+  }
+  if (game.phase === "place" && game.currentSong) {
+    showScreen("gameTurn");
+    await ensureGamePlayer();
+    if (ytPlayer && ytPlayer.loadVideoById) {
+      try { ytPlayer.loadVideoById({ videoId: game.currentSong.youtube_id }); } catch {}
+    }
+    renderTurn();
+    return;
+  }
+  // phase === "draw" or anything else → show pass interstitial first.
+  await ensureGamePlayer();
+  showPassThenDraw();
 }
 
 // ─── Multiplayer (WebRTC via PeerJS) ────────────────────────────────────────
@@ -845,9 +999,11 @@ async function mpEnsureHostPlayer() {
   if (mpYtPlayer) return mpYtPlayer;
   await loadYouTubeAPI();
   mpYtPlayer = await makePlayer("mpYt", (e) => {
-    const btn = $("#mpPlayPauseBtn");
-    if (!btn) return;
-    btn.textContent = (e.data === YT.PlayerState.PLAYING) ? "⏸" : "▶";
+    const playing = e.data === YT.PlayerState.PLAYING;
+    setPlayIcon($("#mpPlayPauseBtn"), playing);
+    setPlayIcon($("#mpPlayPauseInlineBtn"), playing);
+    const wf = $("#mpWaveform");
+    if (wf) wf.classList.toggle("paused", !playing);
   });
   return mpYtPlayer;
 }
@@ -1257,17 +1413,29 @@ function renderMpScreen() {
   }
 }
 
+function mpPlayerRowHTML(p, idx, myPeerId) {
+  const initial = ((p.name || "?").trim().charAt(0) || "?").toUpperCase();
+  const color = PLAYER_COLORS[idx % PLAYER_COLORS.length];
+  const isMe = p.peerId === myPeerId;
+  const roleBits = [];
+  if (p.isHost) roleBits.push(escapeHtml(t("mp.lobby.role.host")));
+  if (isMe)     roleBits.push(escapeHtml(t("mp.lobby.you")));
+  const role = roleBits.join(" · ");
+  return `
+      <div class="avatar" style="width:28px;height:28px;font-size:14px;background:${color}">${escapeHtml(initial)}</div>
+      <span style="flex:1">${escapeHtml(p.name)}</span>
+      <span class="role">${role}</span>`;
+}
+
 function renderMpHostLobby() {
   const list = $("#mpHostPlayers");
   list.innerHTML = "";
-  for (const p of mpGame.players) {
+  mpGame.players.forEach((p, idx) => {
     const row = document.createElement("div");
     row.className = "player-row" + (p.peerId === mpGame.myPeerId ? " you" : "");
-    row.innerHTML = `
-      <span style="flex:1">${escapeHtml(p.name)}</span>
-      <span class="role">${p.isHost ? escapeHtml(t("mp.lobby.role.host")) : ""}${p.peerId === mpGame.myPeerId ? " · " + escapeHtml(t("mp.lobby.you")) : ""}</span>`;
+    row.innerHTML = mpPlayerRowHTML(p, idx, mpGame.myPeerId);
     list.appendChild(row);
-  }
+  });
   $("#mpStartBtn").disabled = mpGame.players.length < 2;
   updateTargetScoreLabel("mpTargetScoreLabel", $("#mpTargetScore").value);
 }
@@ -1276,14 +1444,12 @@ function renderMpPlayerLobby() {
   $("#mpYouAre").textContent = mpGame.myName ? t("mp.lobby.youAre", { name: mpGame.myName }) : t("mp.lobby.connected");
   const list = $("#mpClientPlayers");
   list.innerHTML = "";
-  for (const p of mpGame.players) {
+  mpGame.players.forEach((p, idx) => {
     const row = document.createElement("div");
     row.className = "player-row" + (p.peerId === mpGame.myPeerId ? " you" : "");
-    row.innerHTML = `
-      <span style="flex:1">${escapeHtml(p.name)}</span>
-      <span class="role">${p.isHost ? escapeHtml(t("mp.lobby.role.host")) : ""}${p.peerId === mpGame.myPeerId ? " · " + escapeHtml(t("mp.lobby.you")) : ""}</span>`;
+    row.innerHTML = mpPlayerRowHTML(p, idx, mpGame.myPeerId);
     list.appendChild(row);
-  }
+  });
 }
 
 function renderMpTurn() {
@@ -1295,7 +1461,11 @@ function renderMpTurn() {
   $("#mpTurnPlayerScore").textContent = cur ? cur.timeline.length : 0;
   $("#mpTurnPlayerTarget").textContent = mpGame.targetScore;
 
-  $("#mpPlayPauseBtn").classList.toggle("hidden", !isHost);
+  // The header play/pause stays hidden — the inline one in the now-playing
+  // card is the visible control. Non-host phones don't have audio, so we
+  // hide their inline button too.
+  $("#mpPlayPauseBtn").classList.add("hidden");
+  $("#mpPlayPauseInlineBtn").classList.toggle("hidden", !isHost);
   $("#mpLockInBtn").classList.toggle("hidden", !isMyTurn);
   $("#mpTurnHint").textContent = isMyTurn
     ? t("game.tapWhere")
@@ -1331,8 +1501,11 @@ function renderMpTurn() {
 function mpMakeSlotEl(index, label, clickable) {
   const el = document.createElement("button");
   el.type = "button";
-  el.className = "slot" + (mpGame.selectedSlot === index ? " selected" : "");
-  el.textContent = label;
+  const active = mpGame.selectedSlot === index;
+  el.className = "slot" + (active ? " selected" : "");
+  el.dataset.slot = index;
+  el.setAttribute("aria-label", label);
+  el.innerHTML = slotInnerHTML(active);
   el.disabled = !clickable;
   if (clickable) {
     el.addEventListener("click", () => {
@@ -1349,10 +1522,12 @@ function mpMakeCardEl(card) {
   if (card.region) el.dataset.region = card.region;
   el.innerHTML = `
     <div class="y">${card.year}</div>
+    <div class="divider-v"></div>
     <div class="meta">
-      <strong>${escapeHtml(card.artist)}</strong>
-      <span class="muted">${escapeHtml(card.title)}</span>
-    </div>`;
+      <strong>${escapeHtml(card.title || "—")}</strong>
+      <span>${escapeHtml(card.artist || " ")}</span>
+    </div>
+    <div class="dot"></div>`;
   return el;
 }
 
@@ -1373,27 +1548,28 @@ function renderMpReveal() {
   $("#mpRevealArtist").textContent = song.artist;
   $("#mpRevealTitle").textContent  = song.title;
   $("#mpRevealRegion").textContent = regionLabel(song.region);
+  // Result line is empty — stamp overlay carries the verdict.
   const rr = $("#mpRevealResult");
+  rr.textContent = "";
+  rr.classList.remove("good", "bad");
   const correct = mpGame.lastCorrect;
-  rr.textContent = correct ? t("game.keepsCard", { name: cur.name }) : t("game.misses", { name: cur.name });
-  rr.classList.toggle("good", correct);
-  rr.classList.toggle("bad", !correct);
   const isHost = mpGame.role === "host";
   $("#mpContinueBtn").classList.toggle("hidden", !isHost);
   $("#mpContinueWait").classList.toggle("hidden", isHost);
+  slapStamp($(".reveal-stage", $("#mpReveal")), correct);
 }
 
 function renderMpOver() {
-  $("#mpWinnerName").textContent = mpGame.winner || t("game.nobody");
-  const fs = $("#mpFinalScores");
-  fs.innerHTML = "";
-  const sorted = [...mpGame.players].sort((a, b) => b.timeline.length - a.timeline.length);
-  for (const p of sorted) {
-    const row = document.createElement("div");
-    row.className = "row";
-    row.innerHTML = `<span>${escapeHtml(p.name)}</span><strong>${p.timeline.length}</strong>`;
-    fs.appendChild(row);
-  }
+  const winnerName = mpGame.winner || t("game.nobody");
+  const winner = mpGame.players.find((p) => p.name === winnerName) || { name: winnerName, timeline: [] };
+  renderWinnerStack({
+    nameEl: $("#mpWinnerName"),
+    crownEl: $("#mpWinnerCrown"),
+    tallyEl: $("#mpWinnerTally"),
+    tickerEl: $("#mpFinalScores"),
+    name: winner.name,
+    timeline: winner.timeline,
+  });
 }
 
 // ─── Free-play scanner + player ─────────────────────────────────────────────
@@ -1539,7 +1715,8 @@ async function ensureFreePlayer() {
   freeYtPlayer = await makePlayer("freeYt", (e) => {
     const v = $("#freeVinyl");
     const btn = $("#freePlayPauseBtn");
-    if (e.data === YT.PlayerState.PLAYING) {
+    const playing = e.data === YT.PlayerState.PLAYING;
+    if (playing) {
       v && v.classList.remove("paused");
       btn && (btn.textContent = t("common.pause"));
     } else {
@@ -1589,8 +1766,8 @@ function pickRandomVerified() {
 function updatePrintBadges() {
   function count(regions) { return verifiedSongs.filter((s) => regions.includes(s.region)).length; }
   const allCount = verifiedSongs.length;
-  const worldCount = countPrintable(["world"]);
-  const russiaCount = countPrintable(["russia", "ussr"]);
+  const worldCount = count(["world"]);
+  const russiaCount = count(["russia", "ussr"]);
   const israelCount = count(["israel"]);
 
   function badge(btn, n) {
@@ -1663,11 +1840,64 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (s === 1) mpYtPlayer.pauseVideo();
     else         mpYtPlayer.playVideo();
   });
-  $("#scanBtn").addEventListener("click", startScanner);
-  $("#qrFileInput").addEventListener("change", (e) => handleQrFile(e.target.files[0]));
-  $("#randomBtn").addEventListener("click", () => {
+  $("#scanBtn")?.addEventListener("click", startScanner);
+  $("#qrFileInput")?.addEventListener("change", (e) => handleQrFile(e.target.files[0]));
+  // "Play a random song" is no longer on the home screen — guard for null.
+  $("#randomBtn")?.addEventListener("click", () => {
     const s = pickRandomVerified();
     if (s) freePlay(s);
+  });
+
+  // New design: pass-the-phone interstitial.
+  $("#passStartBtn")?.addEventListener("click", async () => {
+    showScreen("gameTurn");
+    if (game?.phase === "draw" || !game?.currentSong) {
+      await ensureGamePlayer();
+      await drawForCurrentPlayer();
+    } else if (game?.phase === "place" && game.currentSong) {
+      await ensureGamePlayer();
+      renderTurn();
+      if (ytPlayer && ytPlayer.loadVideoById) {
+        try { ytPlayer.loadVideoById({ videoId: game.currentSong.youtube_id }); } catch {}
+      }
+    }
+  });
+
+  // New design: dedicated print screen (replaces the old <details> on home).
+  $("#openPrintBtn")?.addEventListener("click", () => {
+    renderPrintScreen();
+    showScreen("printScreen");
+  });
+
+  // Inline play/pause buttons inside the "now playing" card.
+  $("#playPauseInlineBtn")?.addEventListener("click", () => {
+    if (!ytPlayer) return;
+    const s = ytPlayer.getPlayerState && ytPlayer.getPlayerState();
+    if (s === 1) ytPlayer.pauseVideo();
+    else         ytPlayer.playVideo();
+  });
+  $("#mpPlayPauseInlineBtn")?.addEventListener("click", () => {
+    if (!mpYtPlayer || mpGame?.role !== "host") return;
+    const s = mpYtPlayer.getPlayerState && mpYtPlayer.getPlayerState();
+    if (s === 1) mpYtPlayer.pauseVideo();
+    else         mpYtPlayer.playVideo();
+  });
+
+  // Theme toggle (cycles system → light → dark → system).
+  $("#themeToggle")?.addEventListener("click", cycleTheme);
+  refreshThemeIcon();
+
+  // Build waveform bars once.
+  buildWaveform($("#gameWaveform"));
+  buildWaveform($("#mpWaveform"));
+
+  // Region-grid chips toggle an `.on` class on their label for visuals.
+  $$("#regionGrid input, #mpRegionGrid input").forEach((cb) => {
+    const lbl = cb.closest("label");
+    if (lbl) lbl.classList.toggle("on", cb.checked);
+    cb.addEventListener("change", () => {
+      if (lbl) lbl.classList.toggle("on", cb.checked);
+    });
   });
 
   $("#addPlayerBtn").addEventListener("click", () => {
@@ -1741,3 +1971,77 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 });
+
+// ─── Theme toggle ───────────────────────────────────────────────────────────
+// Cycles system → light → dark → system. Saved to localStorage so it sticks
+// across reloads; "system" follows prefers-color-scheme.
+const THEME_KEY = "mt.theme";
+function readTheme() {
+  try { return localStorage.getItem(THEME_KEY) || "system"; } catch { return "system"; }
+}
+function applyTheme(theme) {
+  const html = document.documentElement;
+  html.classList.remove("theme-light", "theme-dark", "theme-system");
+  html.classList.add("theme-" + (theme === "dark" || theme === "light" ? theme : "system"));
+  try { localStorage.setItem(THEME_KEY, theme); } catch {}
+  refreshThemeIcon();
+}
+function cycleTheme() {
+  const order = ["system", "light", "dark"];
+  const cur = readTheme();
+  const next = order[(order.indexOf(cur) + 1) % order.length];
+  applyTheme(next);
+}
+function refreshThemeIcon() {
+  const icon = $("#themeToggleIcon");
+  if (!icon) return;
+  const cur = readTheme();
+  icon.textContent = cur === "light" ? "☀" : cur === "dark" ? "☾" : "◐";
+}
+
+// ─── Waveform bars ──────────────────────────────────────────────────────────
+// Stable "seeded" heights so the visualizer looks organic but doesn't
+// re-shuffle every render.
+function buildWaveform(el, bars = 26) {
+  if (!el) return;
+  el.innerHTML = "";
+  for (let i = 0; i < bars; i++) {
+    const seed = 0.35 + 0.65 * Math.abs(Math.sin(i * 1.7 + 0.3));
+    const bar = document.createElement("div");
+    bar.className = "bar";
+    bar.style.height = (seed * 100).toFixed(0) + "%";
+    bar.style.animationDuration = (0.5 + (i % 7) * 0.07).toFixed(2) + "s";
+    bar.style.animationDelay = ((i % 5) * 0.06).toFixed(2) + "s";
+    el.appendChild(bar);
+  }
+}
+
+// ─── Print screen ──────────────────────────────────────────────────────────
+// The downloads themselves are static PDFs; this just keeps the summary
+// numbers honest based on the loaded song database.
+function renderPrintScreen() {
+  function countRegions(regions) {
+    return verifiedSongs.filter((s) => regions.includes(s.region)).length;
+  }
+  const total = verifiedSongs.length;
+  const pages = Math.max(1, Math.ceil(total / 20));
+  const totalEl = $("#printSummaryTotal");
+  const packEl = $("#printSummaryPacks");
+  if (totalEl) totalEl.textContent = t("print.cardCount", { n: total, p: pages });
+  if (packEl) packEl.textContent = total ? "4" : "0";
+
+  // Set per-button counts as right-aligned badges.
+  function setBadge(href, n) {
+    const a = $(`.print-buttons a[href="${href}"]`);
+    if (!a) return;
+    a.querySelectorAll(".print-badge").forEach((el) => el.remove());
+    const span = document.createElement("span");
+    span.className = "print-badge";
+    span.textContent = n;
+    a.appendChild(span);
+  }
+  setBadge("../cards/cards-all.pdf",    total);
+  setBadge("../cards/cards-world.pdf",  countRegions(["world"]));
+  setBadge("../cards/cards-russia.pdf", countRegions(["russia", "ussr"]));
+  setBadge("../cards/cards-israel.pdf", countRegions(["israel"]));
+}

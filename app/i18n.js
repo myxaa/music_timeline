@@ -152,6 +152,65 @@ const I18N = {
     "common.play": "▶ Play",
     "common.pause": "⏸ Pause",
     "common.player": "Player",
+    "common.themeAria": "Toggle light/dark theme",
+
+    // New visual-design keys (paper/gold redesign)
+    "home.stamp": "MUSIC · TIMELINE · NO 04",
+    "home.title.line1": "Music",
+    "home.title.line2": "Timeline",
+    "home.tagline": "PASS · PLAY · GUESS THE YEAR",
+
+    "setup.topbar": "NEW GAME · LOCAL",
+    "setup.setUpRound": "Set up the round",
+    "setup.step": "STEP 01 / 02",
+
+    "pass.stamp": "PASS · THE · PHONE",
+    "pass.upNext": "UP NEXT",
+    "pass.cards": "{cards} / {target} CARDS",
+    "pass.start": "Start my turn",
+    "pass.startWithName": "I'm {name} — start my turn",
+    "pass.noCards": "— NO CARDS YET —",
+
+    "game.nowPlaying": "NOW PLAYING",
+    "game.tapWhereTitle": "When was it released?",
+    "game.tapWhere": "Tap a slot on your timeline",
+    "game.older": "↑ OLDER",
+    "game.newer": "NEWER ↓",
+    "game.revealTopbar": "REVEAL",
+    "game.theSongWas": "THE SONG WAS",
+    "game.gameOverTopbar": "GAME OVER",
+    "game.winnerStamp": "· OFFICIAL · WINNER ·",
+    "game.wins": "wins!",
+    "game.winnerCards": "{n} CARDS · CORRECT",
+    "game.keepCardN": "Keep the card · {n}/{target}",
+
+    "mp.join.topbar": "JOIN PARTY",
+    "mp.join.titleQuestion": "Got a code?",
+    "mp.join.help": "Ask the host to show it on their phone.",
+
+    "mp.host.topbar": "HOST PARTY",
+    "mp.host.codeTitle": "Your party code is",
+    "mp.host.codeLabel": "ROOM CODE",
+
+    "mp.lobby.topbar": "CONNECTED",
+    "mp.lobby.connectedBadge": "· CONNECTED ·",
+    "mp.lobby.waitingTitle": "Waiting for the host to start…",
+    "mp.lobby.playersIn": "Players in the lobby",
+    "mp.lobby.leave": "Leave lobby",
+
+    "scan.topbar": "SCAN A CARD",
+    "scan.pointHere": "Point at a card's QR",
+
+    "free.topbar": "NOW PLAYING",
+
+    "print.topbar": "PRINT CARDS",
+    "print.title": "Print physical cards",
+    "print.help": "Each card has a QR code. Scan to play that song.",
+    "print.previewLabel": "PREVIEW · A4 SHEET",
+    "print.summary": "SUMMARY",
+    "print.cardCount": "{n} cards · {p} pages",
+    "print.choose": "Choose a pack",
+    "print.footer": "B&W laser/inkjet · duplex · 20 cards/page · QR front + answer back",
   },
 
   // ─── RUSSIAN ───────────────────────────────────────────────────────────────

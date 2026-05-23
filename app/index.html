@@ -1,57 +1,86 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="theme-system">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <meta name="theme-color" content="#0b0b10" />
+  <meta name="theme-color" content="#f4ede0" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#14110c" media="(prefers-color-scheme: dark)" />
   <link rel="manifest" href="manifest.json" />
   <title>Music Timeline</title>
-  <!-- Google Fonts: Outfit for UI text, Bebas Neue for big numbers -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=20260522e" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css?v=20260523a" />
   <!-- i18n runs before app.js so <html lang/dir> are set and t() exists. -->
-  <script src="i18n.js?v=20260522e"></script>
+  <script src="i18n.js?v=20260523a"></script>
+  <!-- Restore saved theme before paint so we don't flash the wrong palette. -->
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem("mt.theme") || "system";
+        var html = document.documentElement;
+        html.classList.remove("theme-light", "theme-dark", "theme-system");
+        html.classList.add("theme-" + (t === "dark" || t === "light" ? t : "system"));
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
   <main id="app">
-    <!-- ─── HOME ────────────────────────────────────────────────────────── -->
-    <section id="home" class="screen active">
-      <div class="home-hero">
-        <div class="hero-vinyl vinyl" aria-hidden="true"></div>
-        <h1 data-i18n="home.title">Music Timeline</h1>
-        <p class="muted" data-i18n="home.subtitle">Phone-only Hitster: pass and play, no printed cards needed.</p>
-      </div>
-      <button id="gameBtn" class="primary" data-i18n="home.start">Start a game</button>
-      <button id="resumeBtn" class="ghost hidden" data-i18n="home.resume">Resume saved game</button>
-      <button id="resumeHostBtn" class="ghost hidden" data-i18n="home.resumeHost">Resume hosted game</button>
-      <button id="resumePlayerBtn" class="ghost hidden" data-i18n="home.reconnect">Reconnect to game</button>
-      <button id="hostBtn" class="ghost" data-i18n="home.host">Host multiplayer game</button>
-      <button id="joinBtn" class="ghost" data-i18n="home.join">Join multiplayer game</button>
-      <div class="divider"><span data-i18n="home.orFreePlay">or free play</span></div>
-      <button id="scanBtn" class="ghost" data-i18n="home.scan">Scan a card</button>
-      <button id="randomBtn" class="ghost" data-i18n="home.random">Play a random song</button>
-      <p class="tiny muted" id="dbStatus" data-i18n="home.loading">Loading songs…</p>
+    <!-- ─── HOME ──────────────────────────────────────────────────────────── -->
+    <section id="home" class="screen grain active">
+      <button id="themeToggle" class="theme-toggle" data-i18n-aria-label="common.themeAria" aria-label="Toggle theme" title="Toggle theme">
+        <!-- sun/moon swapped in JS based on resolved theme -->
+        <span id="themeToggleIcon" aria-hidden="true">◐</span>
+      </button>
 
-      <!-- Printable card PDFs — pre-generated, B&W, duplex-ready -->
-      <div class="divider"><span data-i18n="home.printSection">print cards</span></div>
-      <details class="print-section" id="printSection">
-        <summary class="print-toggle" data-i18n="home.printToggle">Print cards</summary>
-        <div class="print-buttons">
-          <a class="ghost small print-btn" href="../cards/cards-all.pdf"    download data-i18n="home.printAll">Print All</a>
-          <a class="ghost small print-btn" href="../cards/cards-world.pdf"  download data-i18n="home.printWorld">Print World</a>
-          <a class="ghost small print-btn" href="../cards/cards-russia.pdf" download data-i18n="home.printRussia">Print Russia/USSR</a>
-          <a class="ghost small print-btn" href="../cards/cards-israel.pdf" download data-i18n="home.printIsrael">Print Israel</a>
+      <div class="home-hero">
+        <span class="stamp" data-i18n="home.stamp">MUSIC · TIMELINE · NO 04</span>
+
+        <h1 class="serif">
+          <span data-i18n="home.title.line1">Music</span><br/>
+          <span class="accent" data-i18n="home.title.line2">Timeline</span>
+        </h1>
+        <div class="tagline" data-i18n="home.tagline">PASS · PLAY · GUESS THE YEAR</div>
+
+        <div class="hero-vinyl-wrap">
+          <div class="vinyl" aria-hidden="true"></div>
         </div>
-        <p class="tiny muted" style="margin-top:8px">B&amp;W laser/inkjet · duplex · 20 cards/page · QR front + answer back</p>
-      </details>
+      </div>
+
+      <div class="home-actions">
+        <button id="gameBtn" class="btn btn-primary btn-block btn-lg" data-i18n="home.start">Start a new game</button>
+        <button id="resumeBtn" class="btn btn-ghost btn-block hidden" data-i18n="home.resume">Resume saved game</button>
+        <button id="resumeHostBtn" class="btn btn-ghost btn-block hidden" data-i18n="home.resumeHost">Resume hosted game</button>
+        <button id="resumePlayerBtn" class="btn btn-ghost btn-block hidden" data-i18n="home.reconnect">Reconnect to game</button>
+
+        <div class="row-2">
+          <button id="hostBtn" class="btn btn-ghost" data-i18n="home.host">Host party</button>
+          <button id="joinBtn" class="btn btn-ghost" data-i18n="home.join">Join party</button>
+        </div>
+
+        <div class="row-link">
+          <button id="scanBtn" type="button">↳ <span data-i18n="home.scan">SCAN A CARD</span></button>
+          <button id="openPrintBtn" type="button"><span data-i18n="home.printToggle">PRINT CARDS</span> ↲</button>
+        </div>
+
+        <p class="tiny muted" id="dbStatus" data-i18n="home.loading">Loading songs…</p>
+      </div>
     </section>
 
-    <!-- ─── MULTIPLAYER: JOIN ───────────────────────────────────────────── -->
-    <section id="mpJoin" class="screen">
-      <button class="close" data-screen="home" data-i18n-aria-label="game.home" aria-label="Close">✕</button>
-      <h2 data-i18n="mp.join.title">Join game</h2>
+    <!-- ─── MULTIPLAYER: JOIN ─────────────────────────────────────────────── -->
+    <section id="mpJoin" class="screen grain">
+      <div class="topbar">
+        <button class="iconbtn" data-screen="home" data-i18n-aria-label="game.home" aria-label="Back">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="topbar-label" data-i18n="mp.join.topbar">JOIN PARTY</div>
+        <div class="topbar-spacer"></div>
+      </div>
+
+      <h2 class="serif" data-i18n="mp.join.titleQuestion">Got a code?</h2>
+      <p class="muted" style="font-size:15px" data-i18n="mp.join.help">Ask the host to show it on their phone.</p>
+
       <label class="field">
         <span data-i18n="mp.join.code">Game code</span>
         <input id="mpCodeInput" class="bigcode" type="text" maxlength="4" autocapitalize="characters" autocomplete="off" placeholder="ABCD" />
@@ -60,15 +89,26 @@
         <span data-i18n="mp.join.name">Your name</span>
         <input id="mpNameInput" type="text" maxlength="20" data-i18n-placeholder="mp.join.name" placeholder="Your name" />
       </label>
-      <button id="mpJoinBtn" class="primary" data-i18n="mp.join.action">Join</button>
-      <p id="mpJoinStatus" class="muted small"></p>
+
+      <button id="mpJoinBtn" class="btn btn-primary btn-block btn-lg" data-i18n="mp.join.action">Join game</button>
+      <p id="mpJoinStatus" class="muted small" style="text-align:center"></p>
     </section>
 
-    <!-- ─── MULTIPLAYER: HOST LOBBY ─────────────────────────────────────── -->
-    <section id="mpHostLobby" class="screen">
-      <button class="close" data-screen="home" data-i18n-aria-label="game.home" aria-label="Close" id="mpHostQuitBtn">✕</button>
-      <p class="muted" data-i18n="mp.host.share">Share with players at your table.</p>
-      <div class="bigcode-display" id="mpHostCode">…</div>
+    <!-- ─── MULTIPLAYER: HOST LOBBY ──────────────────────────────────────── -->
+    <section id="mpHostLobby" class="screen grain">
+      <div class="topbar">
+        <button id="mpHostQuitBtn" class="iconbtn" data-i18n-aria-label="game.home" aria-label="Close">×</button>
+        <div class="topbar-label" data-i18n="mp.host.topbar">HOST PARTY</div>
+        <div class="topbar-spacer"></div>
+      </div>
+
+      <h2 class="serif" data-i18n="mp.host.codeTitle">Your party code is</h2>
+
+      <div class="card-paper code-card">
+        <div class="lbl" data-i18n="mp.host.codeLabel">ROOM CODE</div>
+        <div class="bigcode-display" id="mpHostCode">…</div>
+        <div class="url" id="mpShareLinkInline"></div>
+      </div>
 
       <div class="share-section">
         <canvas id="mpQrCanvas" width="200" height="200" class="qrcanvas hidden"></canvas>
@@ -88,10 +128,10 @@
         </div>
       </div>
 
-      <p class="small muted" data-i18n="mp.host.manualHint">Or they can open the app, tap "Join multiplayer game", and enter the code manually.</p>
+      <p class="muted small" style="text-align:center" data-i18n="mp.host.manualHint">Or they can open the app, tap "Join multiplayer game", and enter the code manually.</p>
 
       <div class="field">
-        <span data-i18n="setup.players">Players</span>
+        <span data-i18n="mp.lobby.playersIn">Players in the lobby</span>
         <div class="players-list" id="mpHostPlayers"></div>
       </div>
 
@@ -110,84 +150,142 @@
         </div>
       </div>
 
-      <button id="mpStartBtn" class="primary" disabled data-i18n="setup.start">Start game</button>
+      <button id="mpStartBtn" class="btn btn-primary btn-block btn-lg" disabled data-i18n="setup.start">Start game</button>
     </section>
 
-    <!-- ─── MULTIPLAYER: PLAYER LOBBY ───────────────────────────────────── -->
-    <section id="mpPlayerLobby" class="screen">
-      <button class="close" data-screen="home" data-i18n-aria-label="game.home" aria-label="Close" id="mpPlayerQuitBtn">✕</button>
-      <h2 id="mpYouAre" data-i18n="mp.lobby.connected">Connected</h2>
-      <p class="muted" data-i18n="mp.lobby.waitingStart">Waiting for the host to start the game…</p>
-      <div class="field">
-        <span data-i18n="mp.lobby.players">Players in lobby</span>
-        <div class="players-list" id="mpClientPlayers"></div>
+    <!-- ─── MULTIPLAYER: PLAYER LOBBY (Joined) ───────────────────────────── -->
+    <section id="mpPlayerLobby" class="screen grain center">
+      <div class="topbar" style="width:100%">
+        <div class="topbar-spacer"></div>
+        <div class="topbar-label" data-i18n="mp.lobby.topbar">CONNECTED</div>
+        <button id="mpPlayerQuitBtn" class="iconbtn" data-i18n-aria-label="game.home" aria-label="Close">×</button>
       </div>
+
+      <div class="pass-stack" style="flex:1">
+        <span class="stamp" style="color: var(--success)" data-i18n="mp.lobby.connectedBadge">· CONNECTED ·</span>
+        <div class="vinyl sm" aria-hidden="true"></div>
+        <h2 id="mpYouAre" class="serif" data-i18n="mp.lobby.waitingTitle">Waiting for the host to start…</h2>
+
+        <div class="field">
+          <span data-i18n="mp.lobby.players">Players in lobby</span>
+          <div class="players-list" id="mpClientPlayers"></div>
+        </div>
+      </div>
+
+      <button class="btn btn-ghost btn-block" data-screen="home" data-i18n="mp.lobby.leave">Leave lobby</button>
     </section>
 
-    <!-- ─── MULTIPLAYER: TURN ───────────────────────────────────────────── -->
-    <section id="mpTurn" class="screen turnscreen">
+    <!-- ─── MULTIPLAYER: TURN ────────────────────────────────────────────── -->
+    <section id="mpTurn" class="screen grain turnscreen">
       <header class="turnheader">
-        <button class="close small" id="mpQuitTurnBtn" data-i18n-aria-label="game.home" aria-label="Quit">✕</button>
+        <button class="iconbtn" id="mpQuitTurnBtn" data-i18n-aria-label="game.home" aria-label="Quit">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
         <div class="turnplayer">
-          <div class="turnplayer-name" id="mpTurnPlayerName">Player 1</div>
-          <div class="turnplayer-score muted"><span id="mpTurnPlayerScore">0</span> / <span id="mpTurnPlayerTarget">10</span></div>
+          <div class="turnplayer-name">
+            <strong id="mpTurnPlayerName">Player 1</strong>
+            · <span id="mpTurnPlayerScore">0</span>/<span id="mpTurnPlayerTarget">10</span>
+          </div>
         </div>
-        <div class="turn-actions">
-          <button id="mpPlayPauseBtn" class="iconbtn hidden" data-i18n-aria-label="common.pause" aria-label="Pause">⏸</button>
-        </div>
+        <button id="mpPlayPauseBtn" class="iconbtn hidden" data-i18n-aria-label="common.pause" aria-label="Pause">
+          <svg width="14" height="14" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>
+        </button>
       </header>
 
       <!-- Audio only renders on the host (DJ) phone -->
       <div id="mpYtwrap" aria-hidden="true"><div id="mpYt"></div></div>
 
-      <p class="muted hint" id="mpTurnHint" data-i18n="game.tapWhere">Tap where this song fits in your timeline.</p>
-      <div class="timeline-rail" aria-hidden="true"><span class="timeline-rail-dot"></span></div>
+      <div class="card-paper now-playing">
+        <button id="mpPlayPauseInlineBtn" class="play-btn" data-i18n-aria-label="common.pause" aria-label="Pause">
+          <svg width="20" height="20" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>
+        </button>
+        <div class="np-meta">
+          <div class="np-row">
+            <div class="np-label" data-i18n="game.nowPlaying">NOW PLAYING</div>
+          </div>
+          <div class="waveform" id="mpWaveform"></div>
+        </div>
+      </div>
+
+      <p class="hint" data-i18n="game.tapWhereTitle">When was it released?</p>
+      <p class="hint-sub" id="mpTurnHint" data-i18n="game.tapWhere">Tap a slot on your timeline</p>
+
+      <div class="timeline-end"><div class="line"></div><span class="lbl" data-i18n="game.older">↑ OLDER</span><div class="line"></div></div>
       <div id="mpTimeline" class="timeline"></div>
+      <div class="timeline-end"><div class="line"></div><span class="lbl" data-i18n="game.newer">NEWER ↓</span><div class="line"></div></div>
 
       <div class="turn-footer">
-        <p id="mpPlacementHint" class="muted small"></p>
-        <button id="mpLockInBtn" class="warn hidden" disabled data-i18n="game.lockIn">Reveal &amp; lock in</button>
+        <p id="mpPlacementHint"></p>
+        <button id="mpLockInBtn" class="btn btn-primary btn-block btn-lg hidden" disabled data-i18n="game.lockIn">Reveal &amp; lock in</button>
       </div>
     </section>
 
-    <!-- ─── MULTIPLAYER: REVEAL ─────────────────────────────────────────── -->
-    <section id="mpReveal" class="screen">
-      <div class="reveal-card">
-        <div class="reveal-result" id="mpRevealResult"></div>
-        <div class="reveal-year"   id="mpRevealYear"></div>
-        <div class="reveal-artist" id="mpRevealArtist"></div>
-        <div class="reveal-title"  id="mpRevealTitle"></div>
-        <div class="reveal-region muted" id="mpRevealRegion"></div>
+    <!-- ─── MULTIPLAYER: REVEAL ──────────────────────────────────────────── -->
+    <section id="mpReveal" class="screen grain center">
+      <div class="topbar" style="width:100%">
+        <div class="topbar-spacer"></div>
+        <div class="topbar-label" id="mpRevealTopbar" data-i18n="game.revealTopbar">REVEAL</div>
+        <div class="topbar-spacer"></div>
       </div>
-      <button id="mpContinueBtn" class="primary hidden" data-i18n="game.passNext">Pass to next player</button>
-      <p id="mpContinueWait" class="muted small" data-i18n="game.waitHost">Waiting for host to continue…</p>
+      <div class="reveal-stage">
+        <div class="lead" data-i18n="game.theSongWas">The song was</div>
+        <div class="reveal-card" id="mpRevealCard">
+          <div class="reveal-result" id="mpRevealResult"></div>
+          <div class="reveal-year"   id="mpRevealYear"></div>
+          <div class="reveal-artist" id="mpRevealArtist"></div>
+          <div class="reveal-title"  id="mpRevealTitle"></div>
+          <div class="reveal-region" id="mpRevealRegion"></div>
+        </div>
+      </div>
+      <button id="mpContinueBtn" class="btn btn-primary btn-block btn-lg hidden" data-i18n="game.passNext">Pass to next player</button>
+      <p id="mpContinueWait" class="muted small" style="text-align:center" data-i18n="game.waitHost">Waiting for host to continue…</p>
     </section>
 
-    <!-- ─── MULTIPLAYER: GAME OVER ──────────────────────────────────────── -->
-    <section id="mpOver" class="screen">
-      <h1 id="mpWinnerName"></h1>
-      <p class="muted" data-i18n="game.winsLabel">wins!</p>
-      <div id="mpFinalScores" class="scores"></div>
-      <button data-screen="home" class="ghost" data-i18n="game.home">Home</button>
+    <!-- ─── MULTIPLAYER: GAME OVER ───────────────────────────────────────── -->
+    <section id="mpOver" class="screen grain">
+      <div class="topbar">
+        <div class="topbar-spacer"></div>
+        <div class="topbar-label" data-i18n="game.gameOverTopbar">GAME OVER</div>
+        <button class="iconbtn" data-screen="home" data-i18n-aria-label="game.home" aria-label="Close">×</button>
+      </div>
+      <div class="winner-stack">
+        <span class="stamp" style="color: var(--success)" data-i18n="game.winnerStamp">· OFFICIAL · WINNER ·</span>
+        <div class="crown-wrap" id="mpWinnerCrown"></div>
+        <h1 class="serif win-title">
+          <span id="mpWinnerName"></span><br/>
+          <span class="accent" data-i18n="game.wins">wins!</span>
+        </h1>
+        <div class="cards-tally" id="mpWinnerTally"></div>
+        <div class="year-ticker" id="mpFinalScores"></div>
+      </div>
+      <button data-screen="home" class="btn btn-ghost btn-block" data-i18n="game.home">Home</button>
     </section>
 
     <!-- ─── GAME SETUP ──────────────────────────────────────────────────── -->
-    <section id="gameSetup" class="screen">
-      <button class="close" data-screen="home" data-i18n-aria-label="game.home" aria-label="Close">✕</button>
-      <h2 data-i18n="setup.newGame">New game</h2>
+    <section id="gameSetup" class="screen grain">
+      <div class="topbar">
+        <button class="iconbtn" data-screen="home" data-i18n-aria-label="game.home" aria-label="Back">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="topbar-label" data-i18n="setup.topbar">NEW GAME · LOCAL</div>
+        <div class="topbar-spacer"></div>
+      </div>
 
-      <label class="field">
+      <h2 class="serif" data-i18n="setup.setUpRound">Set up the round</h2>
+      <div class="label-mono" data-i18n="setup.step">STEP 01 / 02</div>
+
+      <div class="field">
         <span data-i18n="setup.players">Players</span>
         <div class="players-list" id="playersList"></div>
-        <button id="addPlayerBtn" class="ghost small" data-i18n="setup.addPlayer">+ Add player</button>
-      </label>
+        <button id="addPlayerBtn" class="btn btn-ghost" data-i18n="setup.addPlayer">+ Add player</button>
+      </div>
 
-      <label class="field">
+      <div class="field">
         <span id="targetScoreLabel">First to <strong id="targetScoreVal">10</strong> cards</span>
         <input id="targetScore" type="range" min="3" max="20" value="10" />
-      </label>
+      </div>
 
-      <label class="field">
+      <div class="field">
         <span data-i18n="setup.songsFrom">Songs from</span>
         <div class="region-grid" id="regionGrid">
           <label><input type="checkbox" value="world"  checked /> <span data-i18n="region.world">World</span></label>
@@ -195,69 +293,136 @@
           <label><input type="checkbox" value="russia" checked /> <span data-i18n="region.russia">Russia</span></label>
           <label><input type="checkbox" value="israel" checked /> <span data-i18n="region.israel">Israel</span></label>
         </div>
-      </label>
+      </div>
 
-      <button id="startGameBtn" class="primary" data-i18n="setup.start">Start game</button>
+      <button id="startGameBtn" class="btn btn-primary btn-block btn-lg" data-i18n="setup.start">Start game</button>
+    </section>
+
+    <!-- ─── PASS THE PHONE (single-device interstitial) ──────────────────── -->
+    <section id="passPhone" class="screen grain center">
+      <div class="pass-stack">
+        <span class="stamp" data-i18n="pass.stamp">PASS · THE · PHONE</span>
+        <div class="avatar lg" id="passAvatar">?</div>
+        <div>
+          <div class="up-next" data-i18n="pass.upNext">UP NEXT</div>
+          <div class="who" id="passWho">—</div>
+          <div class="progress" id="passProgress">0 / 10 cards</div>
+        </div>
+        <div class="mini-timeline" id="passMini"></div>
+      </div>
+      <button id="passStartBtn" class="btn btn-primary btn-block btn-lg">
+        <span id="passStartLabel" data-i18n="pass.start">Start my turn</span>
+      </button>
     </section>
 
     <!-- ─── GAME: TURN ──────────────────────────────────────────────────── -->
-    <section id="gameTurn" class="screen turnscreen">
+    <section id="gameTurn" class="screen grain turnscreen">
       <header class="turnheader">
-        <button class="close small" id="quitGameBtn" data-i18n-aria-label="game.home" aria-label="Quit">✕</button>
+        <button class="iconbtn" id="quitGameBtn" data-i18n-aria-label="game.home" aria-label="Quit">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
         <div class="turnplayer">
-          <div class="turnplayer-name" id="turnPlayerName">Player 1</div>
-          <div class="turnplayer-score muted"><span id="turnPlayerScore">0</span> / <span id="turnPlayerTarget">10</span></div>
+          <div class="turnplayer-name">
+            <strong id="turnPlayerName">Player 1</strong>
+            · <span id="turnPlayerScore">0</span>/<span id="turnPlayerTarget">10</span>
+          </div>
         </div>
-        <div class="turn-actions">
-          <button id="playPauseBtn" class="iconbtn" data-i18n-aria-label="common.pause" aria-label="Pause">⏸</button>
-        </div>
+        <button id="playPauseBtn" class="iconbtn hidden" data-i18n-aria-label="common.pause" aria-label="Pause">
+          <svg width="14" height="14" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>
+        </button>
       </header>
 
       <!-- Hidden YouTube iframe — produces audio while off-screen. -->
       <div id="ytwrap" aria-hidden="true"><div id="yt"></div></div>
 
-      <p class="muted hint" data-i18n="game.tapWhere">Tap where this song fits in your timeline.</p>
-      <div class="timeline-rail" aria-hidden="true"><span class="timeline-rail-dot"></span></div>
+      <div class="card-paper now-playing">
+        <button id="playPauseInlineBtn" class="play-btn" data-i18n-aria-label="common.pause" aria-label="Pause">
+          <svg width="20" height="20" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>
+        </button>
+        <div class="np-meta">
+          <div class="np-row">
+            <div class="np-label" data-i18n="game.nowPlaying">NOW PLAYING</div>
+          </div>
+          <div class="waveform" id="gameWaveform"></div>
+        </div>
+      </div>
+
+      <p class="hint" data-i18n="game.tapWhereTitle">When was it released?</p>
+      <p class="hint-sub" data-i18n="game.tapWhere">Tap a slot on your timeline</p>
+
+      <div class="timeline-end"><div class="line"></div><span class="lbl" data-i18n="game.older">↑ OLDER</span><div class="line"></div></div>
       <div id="timeline" class="timeline"></div>
+      <div class="timeline-end"><div class="line"></div><span class="lbl" data-i18n="game.newer">NEWER ↓</span><div class="line"></div></div>
 
       <div class="turn-footer">
-        <p id="placementHint" class="muted small" data-i18n="game.noSelection">No card selected yet.</p>
-        <button id="lockInBtn" class="warn" disabled data-i18n="game.lockIn">Reveal &amp; lock in</button>
+        <p id="placementHint" data-i18n="game.noSelection">No card selected yet.</p>
+        <button id="lockInBtn" class="btn btn-primary btn-block btn-lg" disabled data-i18n="game.lockIn">Reveal &amp; lock in</button>
       </div>
     </section>
 
     <!-- ─── GAME: REVEAL ────────────────────────────────────────────────── -->
-    <section id="gameReveal" class="screen">
-      <div class="reveal-card" id="revealCard">
-        <div class="reveal-result" id="revealResult"></div>
-        <div class="reveal-year"   id="revealYear"></div>
-        <div class="reveal-artist" id="revealArtist"></div>
-        <div class="reveal-title"  id="revealTitle"></div>
-        <div class="reveal-region muted" id="revealRegion"></div>
+    <section id="gameReveal" class="screen grain center">
+      <div class="topbar" style="width:100%">
+        <div class="topbar-spacer"></div>
+        <div class="topbar-label" id="revealTopbar" data-i18n="game.revealTopbar">REVEAL</div>
+        <div class="topbar-spacer"></div>
       </div>
-      <button id="continueBtn" class="primary" data-i18n="game.passNext">Pass to next player</button>
+      <div class="reveal-stage">
+        <div class="lead" data-i18n="game.theSongWas">The song was</div>
+        <div class="reveal-card" id="revealCard">
+          <div class="reveal-result" id="revealResult"></div>
+          <div class="reveal-year"   id="revealYear"></div>
+          <div class="reveal-artist" id="revealArtist"></div>
+          <div class="reveal-title"  id="revealTitle"></div>
+          <div class="reveal-region" id="revealRegion"></div>
+        </div>
+      </div>
+      <button id="continueBtn" class="btn btn-primary btn-block btn-lg" data-i18n="game.passNext">Pass to next player</button>
     </section>
 
     <!-- ─── GAME OVER ───────────────────────────────────────────────────── -->
-    <section id="gameOver" class="screen">
-      <h1 id="winnerName"></h1>
-      <p class="muted" data-i18n="game.winsLabel">wins!</p>
-      <div id="finalScores" class="scores"></div>
-      <button id="playAgainBtn" class="primary" data-i18n="game.playAgain">Play again</button>
-      <button data-screen="home" class="ghost" data-i18n="game.home">Home</button>
+    <section id="gameOver" class="screen grain">
+      <div class="topbar">
+        <div class="topbar-spacer"></div>
+        <div class="topbar-label" data-i18n="game.gameOverTopbar">GAME OVER</div>
+        <button class="iconbtn" data-screen="home" data-i18n-aria-label="game.home" aria-label="Close">×</button>
+      </div>
+      <div class="winner-stack">
+        <span class="stamp" style="color: var(--success)" data-i18n="game.winnerStamp">· OFFICIAL · WINNER ·</span>
+        <div class="crown-wrap" id="winnerCrown"></div>
+        <h1 class="serif win-title">
+          <span id="winnerName"></span><br/>
+          <span class="accent" data-i18n="game.wins">wins!</span>
+        </h1>
+        <div class="cards-tally" id="winnerTally"></div>
+        <div class="year-ticker" id="finalScores"></div>
+      </div>
+      <button id="playAgainBtn" class="btn btn-primary btn-block btn-lg" data-i18n="game.playAgain">Play again</button>
+      <button data-screen="home" class="btn btn-ghost btn-block" data-i18n="game.home">Home</button>
     </section>
 
     <!-- ─── FREE PLAY SCANNER ───────────────────────────────────────────── -->
-    <section id="scanner" class="screen">
-      <button class="close" data-screen="home" data-i18n-aria-label="game.home" aria-label="Close">✕</button>
-      <div id="reader"></div>
-      <p class="muted" id="scanHint" data-i18n="free.scanHint">Point the camera at the QR code on the back of a card.</p>
-      <!-- File-input fallback shown when camera is unavailable (e.g. FF Mobile) -->
+    <section id="scanner" class="screen grain scanner-screen">
+      <div class="topbar">
+        <div class="topbar-spacer"></div>
+        <div class="topbar-label" data-i18n="scan.topbar">SCAN A CARD</div>
+        <button class="close" data-screen="home" data-i18n-aria-label="game.home" aria-label="Close">×</button>
+      </div>
+
+      <div class="viewfinder">
+        <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+        <div class="scanline" aria-hidden="true"></div>
+        <div id="reader"></div>
+      </div>
+
+      <h2 class="serif" data-i18n="scan.pointHere">Point at a card's QR</h2>
+      <p class="scan-help" id="scanHint" data-i18n="free.scanHint">Point the camera at the QR code on the back of a card.</p>
+
       <label id="qrFileFallback" class="hidden qr-file-label">
         <span data-i18n="free.orUploadQr">Or upload a photo of the QR code</span>
         <input id="qrFileInput" type="file" accept="image/*" />
       </label>
-      <!-- Collapsible debug panel — helps diagnose camera issues on Firefox Mobile -->
+
       <details id="cameraDebug" class="camera-debug">
         <summary>⚙ Camera debug</summary>
         <pre id="cameraDebugLog" class="debug-log">Tap "Scan a card" to run diagnostics.</pre>
@@ -265,31 +430,87 @@
     </section>
 
     <!-- ─── FREE PLAY PLAYER ────────────────────────────────────────────── -->
-    <section id="freePlayer" class="screen">
-      <button class="close" data-screen="home" data-i18n-aria-label="game.home" aria-label="Close">✕</button>
+    <section id="freePlayer" class="screen grain center">
+      <div class="topbar" style="width:100%">
+        <div class="topbar-spacer"></div>
+        <div class="topbar-label" data-i18n="free.topbar">NOW PLAYING</div>
+        <button class="iconbtn" data-screen="home" data-i18n-aria-label="game.home" aria-label="Close">×</button>
+      </div>
       <div id="freeYtWrap" aria-hidden="true"><div id="freeYt"></div></div>
-      <div class="cover">
-        <div class="vinyl" id="freeVinyl" aria-hidden="true"></div>
+
+      <div class="cover" style="flex:1; justify-content:center">
+        <div class="vinyl lg" id="freeVinyl" aria-hidden="true"></div>
         <p class="cover-text" data-i18n="free.nowPlaying">Now playing…</p>
-        <p class="cover-sub muted" data-i18n="free.revealHint">Reveal when you're ready.</p>
+        <p class="cover-sub" data-i18n="free.revealHint">Reveal when you're ready.</p>
       </div>
+
       <div class="controls">
-        <button id="freePlayPauseBtn" class="primary" data-i18n="common.pause">⏸ Pause</button>
-        <button id="freeRevealBtn" class="warn" data-i18n="game.reveal">Reveal answer</button>
+        <button id="freePlayPauseBtn" class="btn btn-ghost" data-i18n="common.pause">⏸ Pause</button>
+        <button id="freeRevealBtn" class="btn btn-primary" data-i18n="game.reveal">Reveal answer</button>
       </div>
+
       <div id="freeAnswer" class="answer hidden">
         <div class="year"   id="freeAnsYear"></div>
         <div class="artist" id="freeAnsArtist"></div>
         <div class="title"  id="freeAnsTitle"></div>
-        <div class="region muted" id="freeAnsRegion"></div>
-        <button data-screen="home" class="ghost" data-i18n="game.done">Done</button>
+        <div class="region" id="freeAnsRegion"></div>
+        <button data-screen="home" class="btn btn-ghost" data-i18n="game.done">Done</button>
       </div>
+    </section>
+
+    <!-- ─── PRINT CARDS ─────────────────────────────────────────────────── -->
+    <section id="printScreen" class="screen grain">
+      <div class="topbar">
+        <button class="iconbtn" data-screen="home" data-i18n-aria-label="game.home" aria-label="Back">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="topbar-label" data-i18n="print.topbar">PRINT CARDS</div>
+        <div class="topbar-spacer"></div>
+      </div>
+
+      <h2 class="serif" data-i18n="print.title">Print physical cards</h2>
+      <p class="muted" data-i18n="print.help">Each card has a QR code. Scan to play that song.</p>
+
+      <div class="card-paper print-preview">
+        <div class="lbl" data-i18n="print.previewLabel">PREVIEW · A4 SHEET</div>
+        <div class="print-grid">
+          <div class="pcard"><div class="pqr"></div><div class="pn">№001</div></div>
+          <div class="pcard"><div class="pqr"></div><div class="pn">№002</div></div>
+          <div class="pcard"><div class="pqr"></div><div class="pn">№003</div></div>
+          <div class="pcard"><div class="pqr"></div><div class="pn">№004</div></div>
+          <div class="pcard"><div class="pqr"></div><div class="pn">№005</div></div>
+          <div class="pcard"><div class="pqr"></div><div class="pn">№006</div></div>
+          <div class="pcard"><div class="pqr"></div><div class="pn">№007</div></div>
+          <div class="pcard"><div class="pqr"></div><div class="pn">№008</div></div>
+          <div class="pcard"><div class="pqr"></div><div class="pn">№009</div></div>
+        </div>
+      </div>
+
+      <div class="print-summary">
+        <div>
+          <div class="lbl" data-i18n="print.summary">SUMMARY</div>
+          <div class="total" id="printSummaryTotal">—</div>
+        </div>
+        <div class="count" id="printSummaryPacks">0</div>
+      </div>
+
+      <div class="field">
+        <span data-i18n="print.choose">Choose a pack</span>
+        <div class="print-buttons">
+          <a class="btn btn-ghost print-btn" href="../cards/cards-all.pdf"    download data-i18n="home.printAll">Print All</a>
+          <a class="btn btn-ghost print-btn" href="../cards/cards-world.pdf"  download data-i18n="home.printWorld">Print World</a>
+          <a class="btn btn-ghost print-btn" href="../cards/cards-russia.pdf" download data-i18n="home.printRussia">Print Russia/USSR</a>
+          <a class="btn btn-ghost print-btn" href="../cards/cards-israel.pdf" download data-i18n="home.printIsrael">Print Israel</a>
+        </div>
+      </div>
+
+      <p class="tiny muted" data-i18n="print.footer">B&amp;W laser/inkjet · duplex · 20 cards/page · QR front + answer back</p>
     </section>
   </main>
 
   <script src="https://unpkg.com/html5-qrcode@2.3.10/html5-qrcode.min.js"></script>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qr-creator@1.0.0/dist/qr-creator.min.js"></script>
-<script src="app.js?v=20260522e"></script>
+  <script src="app.js?v=20260523a"></script>
 </body>
 </html>
