@@ -58,7 +58,12 @@ const HASH_TO_SCREEN = Object.fromEntries(
 );
 
 function showScreen(name, opts) {
-  $$(".screen").forEach((s) => s.classList.toggle("active", s.id === name));
+  // Safety net — never leave the app with nothing visible. If the caller
+  // passed an unknown screen id (e.g. a stale URL hash from a previous
+  // version, or an unhandled popstate target), fall back to home.
+  const screens = $$(".screen");
+  if (!screens.some((s) => s.id === name)) name = "home";
+  screens.forEach((s) => s.classList.toggle("active", s.id === name));
   if (name !== "scanner") stopScanner();
   if (name !== "gameTurn") {
     // pause the game player when leaving the turn screen, but don't destroy it
@@ -90,10 +95,31 @@ function syncRouteFromScreen(name) {
   }
 }
 
+// Belt-and-suspenders: when the page is shown (initial load, tab switch,
+// back-forward cache restore), make sure something is visible.
+window.addEventListener("pageshow", () => {
+  const anyActive = $$(".screen").some((s) => s.classList.contains("active"));
+  if (!anyActive) showScreen("home");
+});
+
 // Browser back/forward — re-derive the screen from the URL.
+//
+// If the user back-swipes past every pushState entry (which on Firefox
+// Mobile PWA can briefly show a blank white screen before the app exits),
+// rewrite the URL to a clean home state so the next interaction starts
+// from a known-good place rather than a stale unknown hash.
 window.addEventListener("popstate", () => {
   const slug = (location.hash || "").replace(/^#/, "");
-  const target = HASH_TO_SCREEN[slug] || "home";
+  const target = HASH_TO_SCREEN[slug];
+  if (!target || target === "home") {
+    // Rewrite history so the bar matches what we're about to show.
+    try {
+      history.replaceState({ screen: "home" }, "",
+        location.pathname + location.search);
+    } catch {}
+    showScreen("home", { fromPop: true });
+    return;
+  }
   showScreen(target, { fromPop: true });
 });
 
